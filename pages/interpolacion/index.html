@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <title>
+        GeoMath | Interpolación
+    </title>
+
+    <!-- CSS -->
+
+    <link
+        rel="stylesheet"
+        href="../../assets/css/global.css">
+
+    <link
+        rel="stylesheet"
+        href="../../assets/css/interpolacion.css">
+
+    <!-- FONT AWESOME -->
+
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <!-- ICON -->
+
+    <link
+        rel="icon"
+        type="image/png"
+        href="../../assets/img/logo.png">
+
+    <!-- MATHJAX -->
+
+    <script
+        src="https://polyfill.io/v3/polyfill.min.js?features=es6">
+    </script>
+
+    <script
+        id="MathJax-script"
+        async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+    </script>
+
+    <!-- DESMOS API -->
+    <script src="https://www.desmos.com/api/v1.11/calculator.js?apiKey=95ae3c138c5845289c3d45408fc8839f"></script>
+
+</head>
+
+<body>
+
+<!-- ================================= -->
+<!-- HEADER -->
+<!-- ================================= -->
+
+<header class="header-pro">
+
+    <div class="navbar">
+
+        <div class="logo-area">
+
+            <h1>
+                GeoMath
+            </h1>
+
+        </div>
+
+        <nav>
+
+            <ul class="nav-links">
+
+                <li>
+                    <a href="../../index.html">
+                        Inicio
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../raices/index.html">
+                        Raíces
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../matrices/index.html">
+                        Matrices
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../taylor/index.html">
+                        Taylor
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../interpolacion/index.html"
+                       class="active-link">
+                        Interpolación
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../integracion/index.html">
+                        Integracion
+                    </a>
+                </li>
+
+            </ul>
+
+        </nav>
+
+    </div>
+
+    <div class="hero-text">
+
+        <h2>
+            Interpolación Polinómica
+        </h2>
+
+        <p>
+            Newton, Lagrange y Trazadores Cúbicos
+        </p>
+
+    </div>
+
+</header>
+
+<!-- ================================= -->
+<!-- MAIN -->
+<!-- ================================= -->
+
+<main class="matrix-layout">
+
+    <!-- ================================= -->
+    <!-- CONTENIDO -->
+    <!-- ================================= -->
+
+    <section class="main-content">
+
+        <div class="container interpolacion-container">
+
+            <!-- ================================= -->
+            <!-- CONFIGURACIÓN -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Configuración
+                </h2>
+
+                <div class="config-grid">
+
+                    <div class="config-item">
+
+                        <label>
+                            Método
+                        </label>
+
+                        <select id="metodo">
+
+                            <option value="newton">
+                                Newton
+                            </option>
+
+                            <option value="lagrange">
+                                Lagrange
+                            </option>
+
+                            <option value="trazadores">
+                                Trazadores Cúbicos
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    <div class="config-item">
+
+                        <label>
+                            Cantidad de puntos
+                        </label>
+
+                        <input
+                            type="number"
+                            id="cantidad-puntos"
+                            value="4"
+                            min="2">
+
+                    </div>
+
+                </div>
+
+                <div class="acciones-container">
+
+                    <button
+                        id="btn-generar-tabla">
+
+                        Generar tabla
+
+                    </button>
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- TABLA DE DATOS -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Datos Experimentales
+                </h2>
+
+                <div
+                    id="tabla-datos-container">
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- BOTONES -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <div class="acciones-container">
+
+                    <button
+                        id="btn-calcular">
+
+                        ▶ Calcular
+
+                    </button>
+
+                    <button
+                        id="btn-limpiar">
+
+                        🗑 Limpiar
+
+                    </button>
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- DIFERENCIAS DIVIDIDAS -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Tabla de Diferencias Divididas
+                </h2>
+
+                <div
+                    id="tabla-newton-container">
+
+                    Aquí aparecerá la tabla...
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- PROCEDIMIENTO -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Cálculo de Diferencias
+                </h2>
+
+                <div
+                    id="procedimiento-diferencias">
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- COEFICIENTES -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Coeficientes
+                </h2>
+
+                <div
+                    id="coeficientes-container">
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- CONSTRUCCIÓN -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Construcción del Polinomio
+                </h2>
+
+                <div
+                    id="construccion-container">
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- SIMPLIFICACIÓN -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Simplificación
+                </h2>
+
+                <div
+                    id="simplificacion-container">
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- POLINOMIO FINAL -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Polinomio Final
+                </h2>
+
+                <div
+                    id="polinomio-final-container">
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- EVALUACIÓN -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Evaluar Polinomio
+                </h2>
+
+                <div class="config-grid">
+
+                    <div class="config-item">
+
+                        <label>
+                            Valor de x
+                        </label>
+
+                        <input
+                            type="number"
+                            id="x-evaluar"
+                            step="any">
+
+                    </div>
+
+                </div>
+
+                <div class="acciones-container">
+
+                    <button
+                        id="btn-evaluar">
+
+                        Evaluar
+
+                    </button>
+
+                </div>
+
+                <div
+                    id="evaluacion-container">
+
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- VISUALIZACIÓN GRÁFICA -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Gráfico - Trazadores Cúbicos
+                </h2>
+
+                <p style="color: #666; font-size: 13px; margin-bottom: 10px;">
+                    Visualización interactiva con Desmos. Cada color representa un segmento diferente. Los puntos rojos son los datos.
+                </p>
+
+                <div class="acciones-container">
+
+                    <button
+                        id="btn-graficar-splines">
+
+                        📊 Generar Gráfico
+
+                    </button>
+
+                </div>
+
+                <div
+                    id="desmos-container"
+                    style="width: 100%; height: 500px; margin-top: 15px; border-radius: 8px; overflow: hidden; display: none;">
+
+                </div>
+
+                <div
+                    id="grafico-mensaje"
+                    style="color: #999; font-size: 13px; text-align: center; padding: 30px;">
+                    El gráfico aparecerá aquí cuando calcules los trazadores
+                </div>
+
+            </div>
+
+            <!-- ================================= -->
+            <!-- VERIFICACIÓN -->
+            <!-- ================================= -->
+
+            <div class="card">
+
+                <h2>
+                    Verificación
+                </h2>
+
+                <div
+                    id="verificacion-container">
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    
+</main>
+
+<!-- ================================= -->
+<!-- JS -->
+<!-- ================================= -->
+ <script src="../../assets/js/interpolacion/fracciones.js"></script>
+
+<script src="../../assets/js/interpolacion/render.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/nerdamer.core.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/Algebra.js"></script>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/nerdamer/1.1.13/nerdamer.core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/nerdamer/1.1.13/Algebra.min.js"></script>
+
+<script src="../../assets/js/interpolacion/newton-engine.js"></script>
+
+<script src="../../assets/js/interpolacion/lagrange.js"></script>
+
+<script src="../../assets/js/interpolacion/trazadores-cubicos.js"></script>
+
+<script src="../../assets/js/interpolacion/visualizacion-desmos.js"></script>
+
+</body>
+
+</html>

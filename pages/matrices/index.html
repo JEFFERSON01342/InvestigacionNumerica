@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8" />
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0" />
+
+    <title>
+        GeoMath | Matrices
+    </title>
+
+    <!-- CSS -->
+    <link
+        rel="stylesheet"
+        href="../../assets/css/global.css">
+
+    <link
+        rel="stylesheet"
+        href="../../assets/css/matrices.css">
+
+    <!-- FONT AWESOME -->
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <link
+        rel="icon"
+        type="image/png"
+        href="../../assets/img/logo.png">
+
+</head>
+
+<body>
+
+<!-- ===================== -->
+<!-- HEADER -->
+<!-- ===================== -->
+
+<header class="header-pro">
+
+    <nav class="navbar">
+
+        <div class="logo-area">
+
+            <h1>
+                GeoMath
+            </h1>
+
+        </div>
+
+        <ul class="nav-links">
+
+            <li>
+                <a href="../../index.html">
+                    Inicio
+                </a>
+            </li>
+
+            <li>
+                <a href="../raices/index.html">
+                    Raíces
+                </a>
+            </li>
+
+            <li>
+                <a
+                    href="../matrices/index.html"
+                    class="active">
+
+                    Matrices
+
+                </a>
+            </li>
+
+            <li>
+                <a href="../taylor/index.html">
+                    Taylor
+                </a>
+            </li>
+
+            <li>
+                <a href="../interpolacion/index.html">
+                    Interpolacion
+                </a>
+            </li>
+
+            <li>
+                <a href="../integracion/index.html">
+                    Integracion
+                </a>
+            </li>
+
+        </ul>
+
+    </nav>
+
+    <div class="hero-text">
+
+        <h2>
+            Matrix Solver
+        </h2>
+
+        <p>
+            Resuelve determinantes,
+            matrices y sistemas
+            lineales paso a paso.
+        </p>
+
+    </div>
+
+</header>
+
+<!-- ===================== -->
+<!-- LAYOUT -->
+<!-- ===================== -->
+
+<main class="matrix-layout">
+
+    <!-- ===================== -->
+    <!-- CONTENIDO -->
+    <!-- ===================== -->
+
+    <section class="main-content">
+
+        <!-- ===================== -->
+        <!-- DETERMINANTES -->
+        <!-- ===================== -->
+
+        <section
+            id="screen-determinants"
+            class="screen active-screen">
+
+            <!-- TITULO -->
+            <div class="card section-card">
+
+                <div class="section-title">
+
+                    <h2>
+                        Determinantes
+                    </h2>
+
+                    <p>
+                        Calcula determinantes
+                        paso a paso.
+                    </p>
+
+                </div>
+
+            </div>
+
+            <!-- TAMAÑO -->
+            <div class="card matrix-size-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-expand"></i>
+
+                        Tamaño de matriz
+
+                    </h3>
+
+                </div>
+
+                <div class="matrix-size-control">
+
+                    <button id="remove-size">
+
+                        <i class="fa-solid fa-minus"></i>
+
+                    </button>
+
+                    <span id="matrix-size-display">
+
+                        3 × 3
+
+                    </span>
+
+                    <button id="add-size">
+
+                        <i class="fa-solid fa-plus"></i>
+
+                    </button>
+
+                </div>
+
+            </div>
+
+            <!-- MATRIZ -->
+            <div class="card matrix-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-table"></i>
+
+                        Matriz A
+
+                    </h3>
+
+                </div>
+
+                <div class="matrix-area">
+
+                    <div class="matrix-name">
+
+                        A =
+
+                    </div>
+
+                    <div class="matrix-wrapper">
+
+                        <div class="matrix-bracket left">
+                            (
+                        </div>
+
+                        <div
+                            id="matrix-container"
+                            class="matrix-grid">
+
+                        </div>
+
+                        <div class="matrix-bracket right">
+                            )
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- METODO -->
+            <div class="card method-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-calculator"></i>
+
+                        Método
+
+                    </h3>
+
+                </div>
+
+                <div class="method-select-wrapper">
+
+                    <select
+                        id="determinant-method"
+                        class="method-select">
+
+                        <option value="cramer">
+                            Cramer
+                        </option>
+
+                        <option value="gauss">
+                            Gauss Jordan
+                        </option>
+
+                        <option value="triangulation">
+                            Triangulación
+                        </option>
+
+                        <option value="sarrus">
+                            Sarrus
+                        </option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+            <!-- PROCEDIMIENTO -->
+            <div class="card procedure-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-list-ol"></i>
+
+                        Procedimiento
+
+                    </h3>
+
+                </div>
+
+                <div class="solve-container">
+
+                    <button
+                        id="solve-determinant"
+                        class="solve-btn">
+
+                        <i class="fa-solid fa-play"></i>
+
+                        Resolver
+
+                    </button>
+
+                </div>
+
+                <div
+                    id="determinant-result"
+                    class="determinant-result">
+
+                </div>
+
+                <div
+                    id="procedure-content"
+                    class="procedure-content">
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- ===================== -->
+        <!-- OPERACIONES -->
+        <!-- ===================== -->
+
+        <!-- ===================== -->
+<!-- OPERACIONES -->
+<!-- ===================== -->
+
+<section
+    id="screen-operations"
+    class="screen">
+
+    <!-- TITLE -->
+    <div class="card section-card">
+
+        <div class="section-title">
+
+            <h2>
+                Operaciones con matrices
+            </h2>
+
+            <p>
+                Suma, resta, multiplicación,
+                transpuesta e inversa.
+            </p>
+
+        </div>
+
+    </div>
+
+    <!-- OPERATIONS LAYOUT -->
+    <div class="operations-layout">
+
+        <!-- MATRIX A -->
+        <div class="card matrix-operation-card">
+
+            <div class="card-header">
+
+                <h3>
+
+                    <i class="fa-solid fa-table"></i>
+
+                    Matrix A
+
+                </h3>
+
+            </div>
+
+            <!-- SIZE -->
+            <div class="matrix-size-input-area">
+
+                <label>
+                    Tamaño
+                </label>
+
+                <input
+                    type="text"
+                    id="matrix-size-a"
+                    value="3x3"
+                    class="matrix-size-input">
+
+            </div>
+
+            <!-- MATRIX -->
+            <div class="matrix-area">
+
+                <div class="matrix-name">
+                    A =
+                </div>
+
+                <div class="matrix-wrapper">
+
+                    <div class="matrix-bracket left">
+                        (
+                    </div>
+
+                    <div
+                        id="operation-matrix-a"
+                        class="matrix-grid">
+
+                    </div>
+
+                    <div class="matrix-bracket right">
+                        )
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- BUTTONS -->
+            <div class="matrix-action-buttons">
+
+                <button
+                    class="solve-btn"
+                    onclick="transposeA()">
+
+                    <i class="fa-solid fa-arrow-right-arrow-left"></i>
+
+                    Transpuesta
+
+                </button>
+
+                <button
+                    class="solve-btn"
+                    onclick="inverseA()">
+
+                    <i class="fa-solid fa-divide"></i>
+
+                    Inversa
+
+                </button>
+
+            </div>
+
+        </div>
+
+        <!-- CENTER BUTTONS -->
+        <div class="operations-center-buttons">
+
+            <button
+                class="solve-btn"
+                onclick="solveAddition()">
+
+                A + B
+
+            </button>
+
+            <button
+                class="solve-btn"
+                onclick="solveSubtraction()">
+
+                A − B
+
+            </button>
+
+            <button
+                class="solve-btn"
+                onclick="solveMultiplication()">
+
+                A × B
+
+            </button>
+
+        </div>
+
+        <!-- MATRIX B -->
+        <div class="card matrix-operation-card">
+
+            <div class="card-header">
+
+                <h3>
+
+                    <i class="fa-solid fa-table"></i>
+
+                    Matrix B
+
+                </h3>
+
+            </div>
+
+            <!-- SIZE -->
+            <div class="matrix-size-input-area">
+
+                <label>
+                    Tamaño
+                </label>
+
+                <input
+                    type="text"
+                    id="matrix-size-b"
+                    value="3x3"
+                    class="matrix-size-input">
+
+            </div>
+
+            <!-- MATRIX -->
+            <div class="matrix-area">
+
+                <div class="matrix-name">
+                    B =
+                </div>
+
+                <div class="matrix-wrapper">
+
+                    <div class="matrix-bracket left">
+                        (
+                    </div>
+
+                    <div
+                        id="operation-matrix-b"
+                        class="matrix-grid">
+
+                    </div>
+
+                    <div class="matrix-bracket right">
+                        )
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- BUTTONS -->
+            <div class="matrix-action-buttons">
+
+                <button
+                    class="solve-btn"
+                    onclick="transposeB()">
+
+                    <i class="fa-solid fa-arrow-right-arrow-left"></i>
+
+                    Transpuesta
+
+                </button>
+
+                <button
+                    class="solve-btn"
+                    onclick="inverseB()">
+
+                    <i class="fa-solid fa-divide"></i>
+
+                    Inversa
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- RESULT -->
+    <div
+        id="operations-result"
+        class="determinant-result">
+
+    </div>
+
+    <!-- PROCEDURE -->
+    <div
+        id="operations-procedure"
+        class="procedure-content">
+
+    </div>
+
+</section>
+
+        <!-- ===================== -->
+        <!-- SISTEMAS -->
+        <!-- ===================== -->
+
+        <section
+            id="screen-systems"
+            class="screen">
+
+            <!-- TITULO -->
+            <div class="card section-card">
+
+                <div class="section-title">
+
+                    <h2>
+                        Sistemas de ecuaciones
+                    </h2>
+
+                    <p>
+                        Resuelve sistemas
+                        lineales paso a paso.
+                    </p>
+
+                </div>
+
+            </div>
+
+            <!-- TAMAÑO -->
+            <div class="card matrix-size-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-expand"></i>
+
+                        Tamaño del sistema
+
+                    </h3>
+
+                </div>
+
+                <div class="matrix-size-control">
+
+                    <button id="remove-system-size">
+
+                        <i class="fa-solid fa-minus"></i>
+
+                    </button>
+
+                    <span id="system-size-display">
+
+                        3 × 3
+
+                    </span>
+
+                    <button id="add-system-size">
+
+                        <i class="fa-solid fa-plus"></i>
+
+                    </button>
+
+                </div>
+
+            </div>
+
+            <!-- MATRIZ -->
+            <div class="card matrix-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-table"></i>
+
+                        Matriz A
+
+                    </h3>
+
+                </div>
+
+                <div class="matrix-area">
+
+                    <div class="matrix-name">
+                        A =
+                    </div>
+
+                    <div class="matrix-wrapper">
+
+                        <div class="matrix-bracket left">
+                            (
+                        </div>
+
+                        <div
+                            id="system-matrix-container"
+                            class="matrix-grid">
+
+                        </div>
+
+                        <div class="matrix-bracket right">
+                            )
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- VECTOR -->
+            <div class="card matrix-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-equals"></i>
+
+                        Vector B
+
+                    </h3>
+
+                </div>
+
+                <!-- VALORES INICIALES -->
+<div class="card matrix-card">
+
+    <div class="card-header">
+
+        <h3>
+
+            <i class="fa-solid fa-play"></i>
+
+            Valores iniciales
+
+        </h3>
+
+    </div>
+
+    <div class="matrix-area">
+
+        <div class="matrix-name">
+            X₀ =
+        </div>
+
+        <div class="matrix-wrapper">
+
+            <div class="matrix-bracket left">
+                (
+            </div>
+
+            <div
+                id="initial-values-container"
+                class="matrix-grid">
+
+            </div>
+
+            <div class="matrix-bracket right">
+                )
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- CONFIG ITERATIVA -->
+<div class="card method-card">
+
+    <div class="card-header">
+
+        <h3>
+
+            <i class="fa-solid fa-sliders"></i>
+
+            Configuración iterativa
+
+        </h3>
+
+    </div>
+
+    <div class="iterative-config">
+
+        <div class="config-group">
+
+            <label>
+                Tolerancia/Error
+            </label>
+
+            <input
+                type="number"
+                id="iterative-tolerance"
+                value="0.000001"
+                step="0.000001">
+
+        </div>
+
+        <div class="config-group">
+
+            <label>
+                Máximo iteraciones
+            </label>
+
+            <input
+                type="number"
+                id="iterative-max-iterations"
+                value="100">
+
+        </div>
+
+    </div>
+
+</div>
+
+                <div class="matrix-area">
+
+                    <div class="matrix-name">
+                        B =
+                    </div>
+
+                    <div class="matrix-wrapper">
+
+                        <div class="matrix-bracket left">
+                            (
+                        </div>
+
+                        <div
+                            id="system-vector-container"
+                            class="matrix-grid">
+
+                        </div>
+
+                        <div class="matrix-bracket right">
+                            )
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- METODO -->
+            <div class="card method-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-calculator"></i>
+
+                        Método
+
+                    </h3>
+
+                </div>
+
+                <div class="method-select-wrapper">
+
+                    <select
+                        id="system-method"
+                        class="method-select">
+
+                        <option value="cramer">
+                            Cramer
+                        </option>
+
+                        <option value="gauss-jordan">
+                            Gauss Jordan
+                        </option>
+
+                        <option value="gaussian">
+                            Triangulación
+                        </option>
+
+                        <option value="LU">
+                            LU
+                        </option>
+
+                        <option value="jacobi">
+                            Jacobi
+                        </option>
+
+                        <option value="gauss-seidel">
+                            Gauss-Seidel
+                        </option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+            <!-- RESULTADOS -->
+            <div class="card procedure-card">
+
+                <div class="card-header">
+
+                    <h3>
+
+                        <i class="fa-solid fa-list-ol"></i>
+
+                        Procedimiento
+
+                    </h3>
+
+                </div>
+
+                <div class="solve-container">
+
+                    <button
+                        id="solve-system"
+                        class="solve-btn">
+
+                        <i class="fa-solid fa-play"></i>
+
+                        Resolver sistema
+
+                    </button>
+
+                </div>
+
+                <div
+                    id="system-result"
+                    class="determinant-result">
+
+                </div>
+
+                <div id="validation-demo-container" class="validation-demo-container">
+                <!-- Aquí se mostrará la demostración visual de las reglas y el reordenamiento -->
+                </div>
+
+                <div
+                    id="system-procedure"
+                    class="procedure-content">
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </section>
+
+    <!-- ===================== -->
+    <!-- SIDEBAR -->
+    <!-- ===================== -->
+
+    <aside class="sidebar">
+
+        <div class="sidebar-header">
+
+            <h3>
+                Herramientas
+            </h3>
+
+        </div>
+
+        <!-- DETERMINANTES -->
+        <button
+            class="sidebar-option active"
+            data-screen="determinants">
+
+            <i class="fa-solid fa-grip"></i>
+
+            <span>
+                Determinantes
+            </span>
+
+        </button>
+
+        <!-- OPERACIONES -->
+        <button
+            class="sidebar-option"
+            data-screen="operations">
+
+            <i class="fa-solid fa-table"></i>
+
+            <span>
+                Operaciones
+            </span>
+
+        </button>
+
+        <!-- SISTEMAS -->
+        <button
+            class="sidebar-option"
+            data-screen="systems">
+
+            <i class="fa-solid fa-equals"></i>
+
+            <span>
+                Sistemas Lineales
+            </span>
+
+        </button>
+
+        <!-- NO LINEALES -->
+        <button
+            class="sidebar-option"
+            onclick="window.location.href='sistemas-no-lineales.html'">
+
+            <i class="fa-solid fa-bezier-curve"></i>
+
+            <span>
+                Sistemas no lineales
+            </span>
+
+        </button>
+
+    </aside>
+
+</main>
+
+<!-- ===================== -->
+<!-- FOOTER -->
+<!-- ===================== -->
+<footer class="footer">
+
+    <p>
+
+        GeoMath © 2026
+        • Plataforma de matemática numérica,
+        hecha por Jefferson, Michel, Angel
+
+    </p>
+
+</footer>
+
+<!-- ===================== -->
+<!-- LIBRERIAS -->
+<!-- ===================== -->
+
+<script src="https://cdn.jsdelivr.net/npm/fraction.js@4.3.7/fraction.min.js"></script>
+
+<script>
+window.MathJax = {
+    tex: {
+        inlineMath: [['$', '$']]
+    }
+};
+</script>
+
+<script
+src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+</script>
+
+<!-- ===================== -->
+<!-- JS -->
+<!-- ===================== -->
+
+<script src="../../assets/js/matrices/utils.js"></script>
+
+<script src="../../assets/js/matrices/validacion-convergencia.js"></script>
+<script src="../../assets/js/matrices/validacion-convergencia-extended.js"></script>
+
+<script src="../../assets/js/matrices/determinantes-cramer.js"></script>
+
+<script src="../../assets/js/matrices/determinante-gauss-jordan.js"></script>
+
+<script src="../../assets/js/matrices/determinante-triangulacion.js"></script>
+
+<script src="../../assets/js/matrices/determinante-sarrus.js"></script>
+
+<script src="../../assets/js/matrices/sistemas-cramer.js"></script>
+
+<script src="../../assets/js/matrices/sistemas-gauss-jordan.js"></script>
+
+<script src="../../assets/js/matrices/sistemas-triangulacion.js"></script>
+
+<script src="../../assets/js/matrices/sistemas-lu.js"></script>
+
+<script src="../../assets/js/matrices/sistemas-jacobi.js"></script>
+
+<script src="../../assets/js/matrices/sistemas-gauss-seidel.js"></script>
+<script src="../../assets/js/matrices/operaciones.js"></script>
+
+<script src="../../assets/js/matrices/apariencia.js"></script>
+
+</body>
+</html>

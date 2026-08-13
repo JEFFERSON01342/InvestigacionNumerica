@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>GeoMath | Programación Lineal</title>
+    <link rel="stylesheet" href="../../assets/css/global.css">
+    <link rel="stylesheet" href="../../assets/css/matrices.css">
+    <link rel="stylesheet" href="../../assets/css/programacion-lineal.css?v=20260813-1">
+    <link rel="icon" type="image/png" href="../../assets/img/logo.png">
+
+    <script src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
+
+    <script src="https://www.desmos.com/api/v1.11/calculator.js?apiKey=95ae3c138c5845289c3d45408fc8839f"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body class="pl-page">
+<header class="header-pro">
+    <div class="navbar">
+        <div class="logo-area"><h1>GeoMath</h1></div>
+        <nav>
+            <ul class="nav-links">
+                <li><a href="../../index.html">Inicio</a></li>
+                <li><a href="../raices/index.html">Raíces</a></li>
+                <li><a href="../matrices/index.html">Matrices</a></li>
+                <li><a href="../taylor/index.html">Taylor</a></li>
+                <li><a href="../interpolacion/index.html">Interpolacion</a></li>
+                <li><a href="../integracion/index.html">Integracion</a></li>
+                <li><a class="active-link" href="index.html">Programación Lineal</a></li>
+            </ul>
+        </nav>
+    </div>
+    <div class="hero-text">
+        <h2>Programación Lineal</h2>
+        <p>Método Simplex paso a paso con entrada LaTeX.</p>
+    </div>
+</header>
+
+<main class="matrix-layout">
+    <section class="main-content">
+        <div class="container">
+            <div class="card">
+                <h2>Configuración</h2>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <label>Objetivo</label>
+                        <div>
+                            <label><input type="radio" name="sense-pl" value="max" checked> Maximizar</label>
+                            <label><input type="radio" name="sense-pl" value="min"> Minimizar</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card funcion-box">
+                <h2>Función objetivo Z</h2>
+                <div class="funcion-wrapper">
+                    <div class="funcion-label">Z =</div>
+                    <math-field id="objective-field"></math-field>
+                </div>
+                <div id="preview-objective" class="preview-box">$$Z=$$</div>
+            </div>
+
+            <div class="card funcion-box">
+                <h2>Restricción (una por vez)</h2>
+                <div class="funcion-wrapper">
+                    <math-field id="constraint-field"></math-field>
+                </div>
+                <div class="acciones-container">
+                    <button id="btn-add-constraint">Añadir restricción</button>
+                    <button id="btn-clear-constraints">Limpiar lista</button>
+                </div>
+                <div>
+                    <label>Restricciones añadidas</label>
+                    <div id="constraintBracket" class="constraint-bracket">\(\left\{\begin{array}{l} \text{(vacío)}\\\end{array}\right.\)</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="acciones-container">
+                    <button id="btn-calc-pl">Calcular Simplex</button>
+                    <button id="btn-clear-all">Limpiar todo</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Comprobación previa</h2>
+                <div id="preflight" class="verification-box">Añade la función objetivo y las restricciones para comprobar el modelo.</div>
+            </div>
+
+            <div class="card">
+                <h2>Pasos del Simplex</h2>
+                <div id="steps"></div>
+            </div>
+
+            <div class="card">
+                <h2>Comprobación de resultados</h2>
+                <div id="verification" class="verification-box">Aquí se verificará la solución al finalizar el método.</div>
+            </div>
+
+            <div class="card">
+                <h2>Gráfica (si aplica)</h2>
+                <div id="plot" style="width:100%;height:360px;"></div>
+            </div>
+
+            <div class="card">
+                <div id="status" class="status"></div>
+            </div>
+        </div>
+    </section>
+
+    <aside class="sidebar">
+        <div class="sidebar-header"><h3>Herramientas</h3></div>
+        <button class="sidebar-option" onclick="window.location.href='../raices/index.html'">
+            <i class="fa-solid fa-chart-line"></i><span>Raíces</span></button>
+        <button class="sidebar-option" onclick="window.location.href='../matrices/index.html'">
+            <i class="fa-solid fa-table"></i><span>Matrices</span></button>
+        <button class="sidebar-option active"><i class="fa-solid fa-table-list"></i><span>Programación Lineal</span></button>
+    </aside>
+</main>
+
+<script src="../../assets/js/programacion-lineal/render.js?v=20260813-6"></script>
+<script src="../../assets/js/programacion-lineal/patch.js?v=20260813-6"></script>
+<script>
+// Set up MathField options and preview wiring similar to Taylor
+document.addEventListener('DOMContentLoaded', ()=>{
+    const objField = document.getElementById('objective-field');
+    const consField = document.getElementById('constraint-field');
+
+    function configureMathField(field){
+        if(!field) return;
+        field.mathVirtualKeyboardPolicy = 'auto';
+        field.smartMode = true;
+        field.smartFence = true;
+        field.virtualKeyboardMode = 'manual';
+        try {
+            field.setOptions && field.setOptions({ virtualKeyboardMode: 'manual', smartMode: true, smartFence: true });
+        } catch (e) {
+            console.warn('MathField setOptions warning', e);
+        }
+    }
+
+    configureMathField(objField);
+    configureMathField(consField);
+
+    const previewObj = document.getElementById('preview-objective');
+    function updatePreview(){
+        const value = objField && objField.value ? objField.value : '';
+        previewObj.innerHTML = `$$Z=${value}$$`;
+        if(window.MathJax) MathJax.typesetPromise();
+    }
+    objField.addEventListener('input', updatePreview);
+    objField.addEventListener('input', ()=>{ if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs(); });
+    consField.addEventListener('input', ()=>{ if(window.MathJax) MathJax.typesetPromise(); });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Prototipo Simplex - Investigación de Operaciones</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <link rel="stylesheet" href="../assets/css/home.css">
+  <link rel="stylesheet" href="../assets/css/simplex.css">
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.1/plotly.min.js"></script>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+  <main class="container">
+    <h1>Prototipo: Método Simplex (paso a paso)</h1>
+
+    <section class="input-area">
+      <label>Objetivo (ejemplo: max: 3 x1 + 5 x2)</label>
+      <textarea id="objective" rows="2">max: 500 x1 + 400 x2</textarea>
+
+      <label>Restricciones (una por línea, ej. 1 x1 + 1.5 x2 &lt;= 750)</label>
+      <textarea id="constraints" rows="6">1 x1 + 1.5 x2 <= 750
+2 x1 + 1 x2 <= 1000</textarea>
+
+      <div class="buttons">
+        <button id="solve">Resolver Simplex</button>
+        <button id="clear">Limpiar</button>
+      </div>
+
+      <div id="status" class="status"></div>
+    </section>
+
+    <section class="results">
+      <h2>Entrada (renderizada)</h2>
+      <div id="render-input"></div>
+
+      <h2>Pasos del Simplex</h2>
+      <div id="steps"></div>
+
+      <h2>Gráfica (solo 2 variables)</h2>
+      <div id="plot" style="width:100%;height:420px;"></div>
+    </section>
+  </main>
+
+  <script src="../assets/js/simplex.js"></script>
+</body>
+</html>

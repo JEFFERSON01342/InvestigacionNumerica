@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <title>
+        GeoMath | Sistemas No Lineales
+    </title>
+
+    <!-- CSS -->
+    <link
+        rel="stylesheet"
+        href="../../assets/css/global.css">
+
+    <link
+        rel="stylesheet"
+        href="../../assets/css/matrices.css">
+
+    <link
+        rel="stylesheet"
+        href="../../assets/css/sistemas-no-lineales.css">
+
+    <!-- FONT AWESOME -->
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <!-- ICON -->
+    <link
+        rel="icon"
+        type="image/png"
+        href="../../assets/img/logo.png">
+
+    <!-- ===================== -->
+    <!-- MATHLIVE -->
+    <!-- ===================== -->
+    <script type="module">
+
+        import "https://esm.run/mathlive";
+
+        window.mathVirtualKeyboardPolicy =
+            "auto";
+
+    </script>
+
+    <!-- ===================== -->
+    <!-- MATHJS -->
+    <!-- ===================== -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/mathjs@14/lib/browser/math.js">
+    </script>
+
+    <!-- ===================== -->
+    <!-- MATHJAX -->
+    <!-- ===================== -->
+    <script
+        src="https://polyfill.io/v3/polyfill.min.js?features=es6">
+    </script>
+
+    <script
+        id="MathJax-script"
+        async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+    </script>
+
+</head>
+
+<body>
+
+<!-- ===================== -->
+<!-- HEADER -->
+<!-- ===================== -->
+
+<header class="header-pro">
+
+    <div class="navbar">
+
+        <div class="logo-area">
+
+            <h1>
+                GeoMath
+            </h1>
+
+        </div>
+
+        <nav>
+
+            <ul class="nav-links">
+
+                <li>
+                    <a href="../../index.html">
+                        Inicio
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../raices/index.html">
+                        Raíces
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../matrices/index.html">
+                        Matrices
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../taylor/index.html">
+                        Taylor
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../interpolacion/index.html">
+                        Interpolacion
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../integracion/index.html">
+                        Integracion
+                    </a>
+                </li>
+
+            </ul>
+
+        </nav>
+
+    </div>
+
+    <div class="hero-text">
+
+        <h2>
+            Sistemas No Lineales
+        </h2>
+
+        <p>
+            Método de Newton-Raphson Multivariable
+        </p>
+
+    </div>
+
+</header>
+
+<!-- ===================== -->
+<!-- LAYOUT -->
+<!-- ===================== -->
+
+<main class="matrix-layout">
+
+    <!-- ===================== -->
+    <!-- CONTENIDO -->
+    <!-- ===================== -->
+
+    <section class="main-content">
+
+        <div class="container snl-container">
+
+        <!-- Método -->
+        <div class="card" id="metodo-sistema">
+
+            <h2>
+                Método
+            </h2>
+
+            <div id="metodo-label" class="metodo-box">
+                Método: Newton-Raphson (Multivariable)
+            </div>
+
+        </div>
+
+        <!-- ===================== -->
+            <!-- CONFIG -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Configuración del sistema
+                </h2>
+
+                <div class="config-grid">
+
+                    <!-- VARIABLES -->
+
+                    <div class="config-item">
+
+                        <label for="cantidad-variables">
+
+                            Número de variables
+
+                        </label>
+
+                        <select id="cantidad-variables">
+
+                            <option value="2">
+                                2 Variables
+                            </option>
+
+                            <option value="3">
+                                3 Variables
+                            </option>
+
+                            <option value="4">
+                                4 Variables
+                            </option>
+
+                            <option value="5">
+                                5 Variables
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    <!-- ITERACIONES -->
+
+                    <div class="config-item">
+
+                        <label for="max-iter">
+
+                            Máximo iteraciones
+
+                        </label>
+
+                        <input
+                            type="number"
+                            id="max-iter"
+                            value="50"
+                            min="1">
+
+                    </div>
+
+                    <!-- TOLERANCIA -->
+
+                    <div class="config-item">
+
+                        <label for="tolerancia">
+
+                            Tolerancia
+
+                        </label>
+
+                        <input
+                            type="number"
+                            id="tolerancia"
+                            value="0.000001"
+                            step="any">
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- SISTEMA -->
+            <!-- ===================== -->
+
+            <div class="card sistema-box">
+
+                <h2>
+                    Sistema de ecuaciones
+                </h2>
+
+                <div id="sistema-container">
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- VALORES -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Aproximación inicial
+                </h2>
+
+                <div
+                    id="valores-iniciales"
+                    class="variables-box">
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- BOTONES -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <div class="acciones-container">
+
+                    <button
+                        id="btn-resolver-sistema">
+
+                        ▶ Resolver sistema
+
+                    </button>
+
+                    <button
+                        id="btn-limpiar">
+
+                        🗑 Limpiar
+
+                    </button>
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- JACOBIANO -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Matriz Jacobiana
+                </h2>
+
+                <div id="jacobiano-container">
+
+                    Aquí aparecerá el jacobiano...
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- RESULTADO -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Resultado
+                </h2>
+
+                <div id="resultado-sistema">
+
+                    Aquí aparecerá la solución...
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- PROCEDIMIENTO -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Procedimiento
+                </h2>
+
+                <div id="procedimiento-container">
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- TABLA -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Tabla de iteraciones
+                </h2>
+
+                <div class="table-container">
+
+                    <table id="tabla-sistema">
+
+                        <thead>
+                        </thead>
+
+                        <tbody>
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- ===================== -->
+    <!-- SIDEBAR -->
+    <!-- ===================== -->
+
+    <aside class="sidebar">
+
+        <div class="sidebar-header">
+
+            <h3>
+                Herramientas
+            </h3>
+
+        </div>
+
+        <!-- MATRICES -->
+        <button
+            class="sidebar-option"
+            onclick="window.location.href='index.html'">
+
+            <i
+                class="fa-solid fa-table"></i>
+
+            <span>
+                Matrices
+            </span>
+
+        </button>
+
+        <!-- SISTEMAS NO LINEALES -->
+        <button
+            class="sidebar-option active">
+
+            <i
+                class="fa-solid fa-bezier-curve"></i>
+
+            <span>
+                Sistemas no lineales
+            </span>
+
+        </button>
+
+    </aside>
+
+</main>
+
+<!-- ===================== -->
+<!-- JS -->
+<!-- ===================== -->
+
+<script src="../../assets/js/matrices/no-lineales/parser.js"></script>
+
+<script src="../../assets/js/matrices/no-lineales/render.js"></script>
+
+<script src="../../assets/js/matrices/no-lineales/jacobiano.js"></script>
+
+<script src="../../assets/js/matrices/no-lineales/newton-sistemas.js"></script>
+
+<!-- ===================== -->
+<!-- INIT -->
+<!-- ===================== -->
+
+<script>
+
+document.addEventListener(
+
+    "DOMContentLoaded",
+
+    () => {
+
+        renderSistema();
+
+        renderValoresIniciales();
+
+        crearTablaIteraciones();
+
+        document
+            .getElementById(
+                "btn-resolver-sistema"
+            )
+            .addEventListener(
+
+                "click",
+
+                () => {
+
+                    resolverNewtonSistemas();
+                }
+            );
+    }
+);
+
+</script>
+
+</body>
+</html>

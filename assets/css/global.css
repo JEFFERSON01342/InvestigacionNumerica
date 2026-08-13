@@ -1,0 +1,289 @@
+/* ===================== */
+/* RESET */
+/* ===================== */
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+/* ===================== */
+/* BODY */
+/* ===================== */
+body{
+
+    font-family:'Segoe UI',sans-serif;
+
+    background:#ffffff;
+
+    color:#1f2937;
+
+    line-height:1.5;
+
+    overflow-x:hidden;
+}
+
+/* ===================== */
+/* HEADER */
+/* ===================== */
+.header-pro{
+
+    background:
+    linear-gradient(
+        135deg,
+        #ef4444,
+        #b91c1c
+    );
+
+    padding:20px 30px;
+
+    text-align:center;
+
+    color:white;
+
+    position:relative;
+
+    overflow:hidden;
+}
+
+.header-pro h1{
+
+    font-size:40px;
+
+    font-weight:bold;
+
+    letter-spacing:1px;
+
+    animation:glow 2s infinite alternate;
+}
+
+.header-pro p{
+
+    font-size:15px;
+
+    opacity:0.9;
+
+    margin-top:5px;
+}
+
+
+/* ===================== */
+/* ANIMACIONES */
+/* ===================== */
+@keyframes fadeUp{
+
+    from{
+        opacity:0;
+        transform:translateY(25px);
+    }
+
+    to{
+        opacity:1;
+        transform:translateY(0);
+    }
+}
+
+@keyframes glow{
+
+    from{
+        text-shadow:0 0 5px #fff;
+    }
+
+    to{
+        text-shadow:0 0 20px #fff;
+    }
+}
+
+/* ===================== */
+/* CONTENEDOR */
+/* ===================== */
+.container{
+
+    max-width:1100px;
+
+    margin:20px auto;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:20px;
+
+    padding:10px;
+
+    animation:fadeUp .8s ease;
+}
+
+/* ===================== */
+/* CARDS */
+/* ===================== */
+.card{
+
+    background:#ffffff;
+
+    border-radius:30px;
+
+    padding:20px;
+
+    box-shadow:
+        10px 10px 20px rgba(0,0,0,0.08),
+        -10px -10px 20px #ffffff,
+        0 0 0 6px #ffe4e6;
+
+    transition:.3s;
+}
+
+.card:hover{
+
+    transform:translateY(-4px);
+
+    box-shadow:
+        0 12px 30px rgba(0,0,0,0.12);
+}
+
+/* ===================== */
+/* TITULOS */
+/* ===================== */
+h2{
+
+    color:#b91c1c;
+
+    margin-bottom:12px;
+
+    font-size:20px;
+}
+
+/* ===================== */
+/* NAVBAR */
+/* ===================== */
+.navbar{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    gap:20px;
+
+    flex-wrap:wrap;
+}
+
+/* LOGO */
+.logo-area h1{
+
+    font-size:34px;
+
+    font-weight:bold;
+
+    letter-spacing:1px;
+
+    animation:glow 2s infinite alternate;
+}
+
+/* LINKS */
+.nav-links{
+
+    display:flex;
+
+    gap:14px;
+
+    list-style:none;
+
+    flex-wrap:wrap;
+}
+
+.nav-links a{
+
+    text-decoration:none;
+
+    color:white;
+
+    padding:10px 16px;
+
+    border-radius:12px;
+
+    font-weight:600;
+
+    transition:.3s;
+}
+
+/* HOVER */
+.nav-links a:hover{
+
+    background:rgba(255,255,255,0.15);
+
+    transform:translateY(-2px);
+}
+
+/* HERO */
+.hero-text{
+
+    margin-top:25px;
+
+    text-align:left;
+}
+
+.hero-text h2{
+
+    color:white;
+
+    font-size:28px;
+
+    margin-bottom:5px;
+}
+
+.hero-text p{
+
+    color:#ffe4e6;
+
+    font-size:15px;
+}
+
+/* ===================== */
+/* SCROLLBAR GLOBAL */
+/* ===================== */
+
+/* ANCHO */
+::-webkit-scrollbar {
+
+    width: 10px;
+
+    height: 10px;
+}
+
+/* FONDO */
+::-webkit-scrollbar-track {
+
+    background: #fff5f5;
+
+    border-radius: 999px;
+}
+
+/* BARRA */
+::-webkit-scrollbar-thumb {
+
+    background:
+        linear-gradient(
+            180deg,
+            #ef4444,
+            #b91c1c
+        );
+
+    border-radius: 999px;
+
+    border: 2px solid #fff5f5;
+
+    transition: .3s;
+}
+
+/* HOVER */
+::-webkit-scrollbar-thumb:hover {
+
+    background:
+        linear-gradient(
+            180deg,
+            #dc2626,
+            #991b1b
+        );
+}

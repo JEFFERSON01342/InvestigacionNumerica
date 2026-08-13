@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>GeoMath | Integracion Numerica</title>
+
+    <link rel="stylesheet" href="../../assets/css/global.css">
+    <link rel="stylesheet" href="../../assets/css/integracion.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="icon" type="image/png" href="../../assets/img/logo.png">
+
+    <script type="module">
+        import "https://esm.run/mathlive";
+        window.mathVirtualKeyboardPolicy = "auto";
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/mathjs@14/lib/browser/math.js"></script>
+    <script src="https://www.desmos.com/api/v1.11/calculator.js?apiKey=95ae3c138c5845289c3d45408fc8839f"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+
+<body>
+    <header class="header-pro">
+        <div class="navbar">
+            <div class="logo-area">
+                <h1>GeoMath</h1>
+            </div>
+
+            <nav>
+                <ul class="nav-links">
+                    <li><a href="../../index.html">Inicio</a></li>
+                    <li><a href="../raices/index.html">Raices</a></li>
+                    <li><a href="../matrices/index.html">Matrices</a></li>
+                    <li><a href="../taylor/index.html">Taylor</a></li>
+                    <li><a href="../interpolacion/index.html">Interpolacion</a></li>
+                    <li><a href="../integracion/index.html" class="active-link">Integracion</a></li>
+                </ul>
+            </nav>
+        </div>
+
+        <div class="hero-text">
+            <h2>Integracion Numerica</h2>
+            <p>Rectangulos, trapecio compuesto y Romberg paso a paso</p>
+        </div>
+    </header>
+
+    <main class="matrix-layout">
+        <section class="main-content">
+            <div class="container integracion-container">
+                <div class="card">
+                    <h2>Metodo de integracion</h2>
+                    <div class="metodos-container">
+                        <button class="metodo-btn active" data-metodo="rectangulo">Rectangulos</button>
+                        <button class="metodo-btn" data-metodo="trapecio">Trapecio</button>
+                        <button class="metodo-btn" data-metodo="romberg">Romberg</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Configuracion</h2>
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <label for="limite-a">Limite inferior (a)</label>
+                            <input type="number" id="limite-a" value="0" step="any">
+                        </div>
+
+                        <div class="config-item">
+                            <label for="limite-b">Limite superior (b)</label>
+                            <input type="number" id="limite-b" value="1" step="any">
+                        </div>
+
+                        <div class="config-item">
+                            <label id="label-n" for="valor-n">Subintervalos (n)</label>
+                            <input type="number" id="valor-n" value="5" min="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card funcion-box">
+                    <h2>Funcion a integrar</h2>
+                    <div class="funcion-wrapper">
+                        <div class="funcion-label">f(x)=</div>
+                        <math-field id="funcion-integracion"></math-field>
+                    </div>
+
+                    <div id="preview-latex" class="preview-box">$$f(x)=e^{x^2}$$</div>
+
+                    <div class="ejemplos-box">
+                        <button class="ejemplo-btn" data-latex="e^{x^2}">e^(x^2)</button>
+                        <button class="ejemplo-btn" data-latex="\sin(x)">sin(x)</button>
+                        <button class="ejemplo-btn" data-latex="\cos(x)">cos(x)</button>
+                        <button class="ejemplo-btn" data-latex="\ln(1+x)">ln(1+x)</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="acciones-container">
+                        <button id="btn-calcular">
+                            <i class="fa-solid fa-play"></i>
+                            Calcular
+                        </button>
+
+                        <button id="btn-limpiar">
+                            <i class="fa-solid fa-trash"></i>
+                            Limpiar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Integral ingresada</h2>
+                    <div id="integral-container">Aqui aparecera la integral...</div>
+                </div>
+
+                <div class="card">
+                    <h2>Calculo de Delta x</h2>
+                    <div id="delta-container">Aqui aparecera Delta x...</div>
+                </div>
+
+                <div class="card">
+                    <h2>Tabla de puntos</h2>
+                    <div class="table-container">
+                        <table id="tabla-puntos">
+                            <thead>
+                                <tr>
+                                    <th>i</th>
+                                    <th>x_i</th>
+                                    <th>f(x_i)</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Formula aplicada</h2>
+                    <div id="formula-container">Aqui aparecera la formula...</div>
+                </div>
+
+                <div class="card">
+                    <h2>Sustitucion numerica</h2>
+                    <div id="sustitucion-container">Aqui aparecera la sustitucion...</div>
+                </div>
+
+                <div class="card">
+                    <h2>Resultado final</h2>
+                    <div id="resultado-container">Aqui aparecera el resultado...</div>
+                </div>
+
+                <div class="card">
+                    <h2>Grafica y area bajo la curva</h2>
+                    <div id="grafica-integracion"></div>
+                    <div id="comparacion-area" class="comparacion-area">
+                        Aqui aparecera la comparacion de areas...
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Procedimiento paso a paso</h2>
+                    <div id="procedimiento-container"></div>
+                </div>
+            </div>
+        </section>
+
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h3>Herramientas</h3>
+            </div>
+
+            <button class="sidebar-option" onclick="window.location.href='../raices/index.html'">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Raices</span>
+            </button>
+
+            <button class="sidebar-option" onclick="window.location.href='../matrices/index.html'">
+                <i class="fa-solid fa-table"></i>
+                <span>Matrices</span>
+            </button>
+
+            <button class="sidebar-option" onclick="window.location.href='../taylor/index.html'">
+                <i class="fa-solid fa-superscript"></i>
+                <span>Taylor</span>
+            </button>
+
+            <button class="sidebar-option" onclick="window.location.href='../interpolacion/index.html'">
+                <i class="fa-solid fa-chart-simple"></i>
+                <span>Interpolacion</span>
+            </button>
+
+            <button class="sidebar-option active">
+                <i class="fa-solid fa-chart-area"></i>
+                <span>Integracion</span>
+            </button>
+        </aside>
+    </main>
+
+    <script src="../../assets/js/integracion/parser.js"></script>
+    <script src="../../assets/js/integracion/render.js"></script>
+    <script src="../../assets/js/integracion/rectangulo.js"></script>
+    <script src="../../assets/js/integracion/trapecio.js"></script>
+    <script src="../../assets/js/integracion/romberg.js"></script>
+    <script src="../../assets/js/integracion/desmos.js"></script>
+    <script src="../../assets/js/integracion/integracion.js"></script>
+</body>
+
+</html>

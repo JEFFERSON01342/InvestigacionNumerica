@@ -1,0 +1,13 @@
+/* Estilos básicos para la página simplex */
+.container{ max-width:1100px; margin:18px auto; padding:12px; font-family: Arial, Helvetica, sans-serif; }
+.input-area{ background:#f7f9fb; padding:12px; border-radius:6px; box-shadow:0 0 6px rgba(0,0,0,0.05); }
+.input-area label{ display:block; margin-top:8px; font-weight:600; }
+.input-area textarea{ width:100%; font-family:monospace; padding:8px; box-sizing:border-box; }
+.buttons{ margin-top:10px; }
+.buttons button{ margin-right:8px; padding:8px 12px; }
+.status{ margin-top:8px; color:#a33; }
+.results{ margin-top:18px; }
+.simplex-table{ border-collapse:collapse; margin-bottom:12px; }
+.simplex-table th, .simplex-table td{ border:1px solid #ccc; padding:6px 8px; text-align:center; }
+.simplex-table .objrow{ background:#e8f0ff; font-weight:700; }
+h1,h2{ color:#0b5394; }

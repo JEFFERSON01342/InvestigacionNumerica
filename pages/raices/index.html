@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>GeoMath Raices</title>
+
+    <link rel="stylesheet" href="../../assets/css/global.css">
+    <link rel="stylesheet" href="../../assets/css/raices.css">
+
+    <!-- ===================== -->
+    <!-- DESMOS -->
+    <!-- ===================== -->
+    <script src="https://www.desmos.com/api/v1.11/calculator.js?apiKey=95ae3c138c5845289c3d45408fc8839f"></script>
+
+    <!-- ===================== -->
+    <!-- NERDAMER -->
+    <!-- ===================== -->
+    <script src="https://cdn.jsdelivr.net/npm/nerdamer@latest/nerdamer.core.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nerdamer@latest/Algebra.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nerdamer@latest/Solve.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjs@14/lib/browser/math.js"></script>
+    <!-- ===================== -->
+    <!-- MATHJAX (LATEX) -->
+    <!-- ===================== -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+
+    <script id="MathJax-script" async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+    </script>
+
+    <!-- ===================== -->
+    <!-- ICON -->
+    <!-- ===================== -->
+        <link rel="icon" type="image/png" href="../../assets/img/logo.png">
+
+</head>
+
+<body>
+
+<!-- ===================== -->
+<!-- HEADER -->
+<!-- ===================== -->
+<header class="header-pro">
+
+    <div class="navbar">
+
+        <div class="logo-area">
+
+            <h1>GeoMath</h1>
+
+        </div>
+
+        <nav>
+
+            <ul class="nav-links">
+
+                <li>
+                    <a href="../../index.html">
+                        Home
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../raices/index.html">
+                        Raíces
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../matrices/index.html">
+                        Matrices
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../taylor/index.html">
+                        Taylor
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../interpolacion/index.html">
+                        Interpolacion
+                    </a>
+                </li>
+
+                <li>
+                    <a href="../integracion/index.html">
+                        Integracion
+                    </a>
+                </li>
+
+            </ul>
+
+        </nav>
+
+    </div>
+
+    <div class="hero-text">
+
+        <h2>
+            Métodos Numéricos
+        </h2>
+
+        <p>
+            Aproximación de raíces de funciones 
+        </p>
+
+    </div>
+
+</header>
+
+<!-- ===================== -->
+<!-- CONTENEDOR -->
+<!-- ===================== -->
+<div class="container">
+
+    <!-- ===================== -->
+    <!-- INPUT FUNCIÓN -->
+    <!-- ===================== -->
+    <div class="card">
+
+        <h2 id="titulo-funcion">
+            Escriba f(x):
+        </h2>
+
+        <div id="cientifica"></div>
+
+    </div>
+
+    <!-- ===================== -->
+    <!-- GRÁFICA -->
+    <!-- ===================== -->
+    <div class="card">
+
+        <h2> Gráfica de la función</h2>
+
+        <div id="grafica"></div>
+
+    </div>
+
+    <!-- ===================== -->
+    <!-- CONTROLES -->
+    <!-- ===================== -->
+    <div class="card controls">
+
+        <h2> Método numérico</h2>
+
+        <!-- SELECTOR CATEGORÍA -->
+        <div class="selector-categoria">
+
+            <button
+                class="categoria-btn activo"
+                data-categoria="abiertos-cerrados">
+
+                Métodos Abiertos y Cerrados
+            </button>
+
+            <button
+                class="categoria-btn"
+                data-categoria="especializados">
+
+                Métodos Especializados
+            </button>
+
+        </div>
+
+        <!-- BOTONES MÉTODOS -->
+        <div class="selector-metodo">
+
+            <!-- MÉTODOS ABIERTOS Y CERRADOS -->
+            <div class="categoria-grupo" data-categoria="abiertos-cerrados">
+
+                <button
+                    class="metodo-btn"
+                    data-metodo="biseccion">
+
+                    Bisección
+                </button>
+
+                <button
+                    class="metodo-btn"
+                    data-metodo="reglaFalsa">
+
+                    Regla Falsa
+                </button>
+
+                <button
+                    class="metodo-btn"
+                    data-metodo="newton">
+
+                    Newton Raphson
+                </button>
+
+                <button
+                    class="metodo-btn"
+                    data-metodo="secante">
+
+                    Secante
+                </button>
+
+                <button
+                    class="metodo-btn"
+                    data-metodo="puntoFijo">
+
+                    Punto Fijo
+                </button>
+
+            </div>
+
+            <!-- MÉTODOS ESPECIALIZADOS -->
+            <div class="categoria-grupo oculto" data-categoria="especializados">
+
+                <button
+                    class="metodo-btn"
+                    data-metodo="muller">
+
+                    Müller
+                </button>
+
+                <button
+                    class="metodo-btn"
+                    data-metodo="bairstow">
+
+                    Bairstow
+                </button>
+
+                <button
+                    class="metodo-btn"
+                    data-metodo="hornerNewton">
+
+                    Horner-Newton
+                </button>
+
+            </div>
+
+        </div>
+
+        <!-- INPUTS -->
+<div class="inputs-metodo" id="inputs-metodo">
+
+    <div id="input-a-group">
+
+        <label>a:</label>
+
+        <input
+            type="number"
+            step="any"
+            id="input-a">
+    </div>
+
+    <div id="input-b-group">
+
+        <label>b:</label>
+
+        <input
+            type="number"
+            step="any"
+            id="input-b">
+    </div>
+
+    <div id="input-x0-group">
+
+        <label>x₀:</label>
+
+        <input
+            type="number"
+            step="any"
+            id="input-x0">
+    </div>
+
+    <div id="input-r-group">
+
+        <label>r:</label>
+
+        <input
+            type="number"
+            step="any"
+            id="input-r"
+            value="-1">
+    </div>
+
+    <div id="input-s-group">
+
+        <label>s:</label>
+
+        <input
+            type="number"
+            step="any"
+            id="input-s"
+            value="-0.25">
+    </div>
+
+</div>
+
+    <button id="btn-iterar">
+
+        Ejecutar método
+
+    </button>
+
+    </div>
+
+    <!-- ===================== -->
+    <!-- RESULTADO -->
+    <!-- ===================== -->
+    <div class="card resultado-box" id="resultado-box">
+
+        <h2> Resultado</h2>
+
+        <div id="resultado-text">
+
+            Aquí aparecerá la raíz aproximada...
+
+        </div>
+
+    </div>
+
+    <!-- ===================== -->
+    <!-- TABLA -->
+    <!-- ===================== -->
+    <div class="card">
+
+        <h2> Tabla de iteraciones</h2>
+
+        <div class="table-container">
+
+            <table id="tabla-iteraciones">
+
+                <thead></thead>
+
+                <tbody></tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- ===================== -->
+<!-- SCRIPT -->
+<!-- ===================== -->
+<!-- ===================== -->
+<!-- SCRIPTS -->
+<!-- ===================== -->
+
+<script src="../../assets/js/raices/latex-parser.js"></script>
+
+<script src="../../assets/js/raices/math-engine.js"></script>
+
+<script src="../../assets/js/raices/desmos.js"></script>
+
+<script src="../../assets/js/raices/ui.js"></script>
+
+<script src="../../assets/js/raices/metodos/biseccion.js"></script>
+
+<script src="../../assets/js/raices/metodos/regla-falsa.js"></script>
+
+<script src="../../assets/js/raices/metodos/newton.js"></script>
+
+<script src="../../assets/js/raices/metodos/secante.js"></script>
+
+<script src="../../assets/js/raices/metodos/punto-fijo.js"></script>
+
+<script src="../../assets/js/raices/metodos/muller.js"></script>
+
+<script src="../../assets/js/raices/metodos/bairstow.js"></script>
+
+<script src="../../assets/js/raices/metodos/newton-horner.js"></script>
+
+<script src="../../assets/js/raices/raices.js"></script>
+
+</body>
+</html>

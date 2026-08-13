@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <title>
+        GeoMath | Taylor
+    </title>
+
+    <!-- ===================== -->
+    <!-- CSS -->
+    <!-- ===================== -->
+
+    <link
+        rel="stylesheet"
+        href="../../assets/css/global.css">
+
+    <link
+        rel="stylesheet"
+        href="../../assets/css/matrices.css">
+
+    <link
+        rel="stylesheet"
+        href="../../assets/css/taylor.css">
+
+    <!-- ===================== -->
+    <!-- FONT AWESOME -->
+    <!-- ===================== -->
+
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <!-- ===================== -->
+    <!-- ICON -->
+    <!-- ===================== -->
+
+    <link
+        rel="icon"
+        type="image/png"
+        href="../../assets/img/logo.png">
+
+    <!-- ===================== -->
+    <!-- MATHLIVE -->
+    <!-- ===================== -->
+
+    <script type="module">
+
+        import "https://esm.run/mathlive";
+
+        window.mathVirtualKeyboardPolicy =
+            "auto";
+
+    </script>
+
+    <!-- ===================== -->
+    <!-- MATHJS -->
+    <!-- ===================== -->
+
+    <script
+        src="https://cdn.jsdelivr.net/npm/mathjs@14/lib/browser/math.js">
+    </script>
+
+    <!-- ===================== -->
+    <!-- MATHJAX -->
+    <!-- ===================== -->
+
+    <script
+        src="https://polyfill.io/v3/polyfill.min.js?features=es6">
+    </script>
+
+    <script
+        id="MathJax-script"
+        async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+    </script>
+
+</head>
+
+<body>
+
+<!-- ===================== -->
+<!-- HEADER -->
+<!-- ===================== -->
+
+<header class="header-pro">
+
+    <div class="navbar">
+
+        <div class="logo-area">
+
+            <h1>
+                GeoMath
+            </h1>
+
+        </div>
+
+        <nav>
+
+            <ul class="nav-links">
+
+                <li>
+
+                    <a href="../../index.html">
+
+                        Inicio
+
+                    </a>
+
+                </li>
+
+                <li>
+
+                    <a href="../raices/index.html">
+
+                        Raíces
+
+                    </a>
+
+                </li>
+
+                <li>
+
+                    <a href="../matrices/index.html">
+
+                        Matrices
+
+                    </a>
+
+                </li>
+
+                <li>
+
+                    <a href="../taylor/index.html">
+
+                        Taylor
+
+                    </a>
+
+                </li>
+
+                <li>
+
+                    <a href="../interpolacion/index.html">
+
+                        Interpolacion
+
+                    </a>
+
+                </li>
+
+                <li>
+
+                    <a href="../integracion/index.html">
+
+                        Integracion
+
+                    </a>
+
+                </li>
+
+            </ul>
+
+        </nav>
+
+    </div>
+
+    <div class="hero-text">
+
+        <h2>
+            Serie de Taylor
+        </h2>
+
+        <p>
+            Aproximación polinómica paso a paso
+        </p>
+
+    </div>
+
+</header>
+
+<!-- ===================== -->
+<!-- MAIN -->
+<!-- ===================== -->
+
+<main class="matrix-layout">
+
+    <!-- ===================== -->
+    <!-- CONTENIDO -->
+    <!-- ===================== -->
+
+    <section class="main-content">
+
+        <div class="container taylor-container">
+
+            <!-- ===================== -->
+            <!-- CONFIG -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Configuración
+                </h2>
+
+                <div class="config-grid">
+
+                    <!-- ORDEN -->
+
+                    <div class="config-item">
+
+                        <label for="orden-taylor">
+
+                            Orden del polinomio
+
+                        </label>
+
+                        <input
+                            type="number"
+                            id="orden-taylor"
+                            value="5"
+                            min="0">
+
+                    </div>
+
+                    <!-- PUNTO -->
+
+                    <div class="config-item">
+
+                        <label for="punto-a">
+
+                            Punto de expansión (a)
+
+                        </label>
+
+                        <input
+                            type="number"
+                            id="punto-a"
+                            value="0"
+                            step="any">
+
+                    </div>
+
+                    <!-- X -->
+
+                    <div class="config-item">
+
+                        <label for="valor-x">
+
+                            Valor a aproximar (x)
+
+                        </label>
+
+                        <input
+                            type="number"
+                            id="valor-x"
+                            value="1"
+                            step="any">
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- FUNCIÓN -->
+            <!-- ===================== -->
+
+            <div class="card funcion-box">
+
+                <h2>
+                    Función
+                </h2>
+
+                <div class="funcion-wrapper">
+
+                    <div class="funcion-label">
+
+                        f(x)=
+
+                    </div>
+
+                    <math-field
+                        id="funcion-taylor">
+
+                    </math-field>
+
+                </div>
+
+                <!-- ===================== -->
+                <!-- PREVIEW LATEX -->
+                <!-- ===================== -->
+
+                <div
+                    id="preview-latex"
+                    class="preview-box">
+
+                    $$f(x)=e^x$$
+
+                </div>
+
+                <!-- ===================== -->
+                <!-- EJEMPLOS -->
+                <!-- ===================== -->
+
+                <div class="ejemplos-box">
+
+                    <button
+                        class="ejemplo-btn"
+                        onclick="setEjemplo('e^x')">
+
+                        e^x
+
+                    </button>
+
+                    <button
+                        class="ejemplo-btn"
+                        onclick="setEjemplo('\\sin(x)')">
+
+                        sin(x)
+
+                    </button>
+
+                    <button
+                        class="ejemplo-btn"
+                        onclick="setEjemplo('\\cos(x)')">
+
+                        cos(x)
+
+                    </button>
+
+                    <button
+                        class="ejemplo-btn"
+                        onclick="setEjemplo('\\ln(1+x)')">
+
+                        ln(1+x)
+
+                    </button>
+
+                    <button
+                        class="ejemplo-btn"
+                        onclick="setEjemplo('\\frac{1}{1-x}')">
+
+                        1/(1-x)
+
+                    </button>
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- BOTONES -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <div class="acciones-container">
+
+                    <button
+                        id="btn-calcular-taylor">
+
+                        ▶ Calcular Taylor
+
+                    </button>
+
+                    <button
+                        id="btn-limpiar">
+
+                        🗑 Limpiar
+
+                    </button>
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- FUNCIÓN ORIGINAL -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Función original
+                </h2>
+
+                <div
+                    id="funcion-original-container">
+
+                    Aquí aparecerá la función...
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- DERIVADAS -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Derivadas sucesivas
+                </h2>
+
+                <div
+                    id="derivadas-container">
+
+                    Aquí aparecerán las derivadas...
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- TABLA -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Tabla de términos
+                </h2>
+
+                <div class="table-container">
+
+                    <table id="tabla-taylor">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    n
+                                </th>
+
+                                <th>
+                                    Derivada
+                                </th>
+
+                                <th>
+                                    f⁽ⁿ⁾(a)
+                                </th>
+
+                                <th>
+                                    Término
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- POLINOMIO -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Polinomio de Taylor
+                </h2>
+
+                <div
+                    id="polinomio-container">
+
+                    Aquí aparecerá el polinomio...
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- SUSTITUCIÓN -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Sustitución numérica
+                </h2>
+
+                <div
+                    id="sustitucion-container">
+
+                    Aquí aparecerá la sustitución...
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- RESULTADO -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Resultado final
+                </h2>
+
+                <div
+                    id="resultado-container">
+
+                    Aquí aparecerá el resultado...
+
+                </div>
+
+            </div>
+
+            <!-- ===================== -->
+            <!-- PROCEDIMIENTO -->
+            <!-- ===================== -->
+
+            <div class="card">
+
+                <h2>
+                    Procedimiento paso a paso
+                </h2>
+
+                <div
+                    id="procedimiento-container">
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- ===================== -->
+    <!-- SIDEBAR -->
+    <!-- ===================== -->
+
+    <aside class="sidebar">
+
+        <div class="sidebar-header">
+
+            <h3>
+                Herramientas
+            </h3>
+
+        </div>
+
+        <!-- RAICES -->
+
+        <button
+            class="sidebar-option"
+            onclick="window.location.href='../raices/index.html'">
+
+            <i
+                class="fa-solid fa-chart-line"></i>
+
+            <span>
+                Raíces
+            </span>
+
+        </button>
+
+        <!-- MATRICES -->
+
+        <button
+            class="sidebar-option"
+            onclick="window.location.href='../matrices/index.html'">
+
+            <i
+                class="fa-solid fa-table"></i>
+
+            <span>
+                Matrices
+            </span>
+
+        </button>
+
+        <!-- TAYLOR -->
+
+        <button
+            class="sidebar-option active">
+
+            <i
+                class="fa-solid fa-superscript"></i>
+
+            <span>
+                Taylor
+            </span>
+
+        </button>
+
+        <button
+            class="sidebar-option"
+            onclick="window.location.href='../interpolacion/index.html'">
+
+            <i
+                class="fa-solid fa-chart-simple"></i>
+
+            <span>
+                Interpolacion
+            </span>
+
+        </button>
+
+        <button
+            class="sidebar-option"
+            onclick="window.location.href='../integracion/index.html'">
+
+            <i
+                class="fa-solid fa-chart-area"></i>
+
+            <span>
+                Integracion
+            </span>
+
+        </button>
+
+    </aside>
+
+</main>
+
+<!-- ===================== -->
+<!-- JS -->
+<!-- ===================== -->
+
+<!-- PARSER -->
+
+<script src="../../assets/js/taylor/parser.js"></script>
+
+<!-- RENDER -->
+
+<script src="../../assets/js/taylor/render.js"></script>
+
+<!-- ENGINE -->
+
+<script src="../../assets/js/taylor/taylor-engine.js"></script>
+
+<!-- PRINCIPAL -->
+
+<script src="../../assets/js/taylor/taylor.js"></script>
+
+<!-- ===================== -->
+<!-- INIT -->
+<!-- ===================== -->
+
+<script>
+
+document.addEventListener(
+
+    "DOMContentLoaded",
+
+    () => {
+
+        // =====================
+        // MATHFIELD
+        // =====================
+
+        const field =
+            document.getElementById(
+                "funcion-taylor"
+            );
+
+        field.setOptions({
+
+            virtualKeyboardMode:
+                "onfocus",
+
+            virtualKeyboards:
+                "all",
+
+            smartMode:
+                true,
+
+            smartFence:
+                true,
+
+            inlineShortcuts: {
+
+                pi: "\\pi",
+
+                sqrt: "\\sqrt{#0}",
+
+                sin: "\\sin",
+
+                cos: "\\cos",
+
+                tan: "\\tan",
+
+                ln: "\\ln",
+
+                log: "\\log",
+
+                alpha: "\\alpha",
+
+                beta: "\\beta"
+            }
+        });
+
+        // =====================
+        // PLACEHOLDER
+        // =====================
+
+        field.setAttribute(
+
+            "placeholder",
+
+            "Ejemplo: e^x"
+        );
+
+        // =====================
+        // EJEMPLO INICIAL
+        // =====================
+
+        field.value =
+            "e^x";
+
+        actualizarPreview();
+
+        // =====================
+        // ACTUALIZAR PREVIEW
+        // =====================
+
+        field.addEventListener(
+
+            "input",
+
+            actualizarPreview
+        );
+
+        // =====================
+        // BOTÓN CALCULAR
+        // =====================
+
+        document
+            .getElementById(
+                "btn-calcular-taylor"
+            )
+            .addEventListener(
+
+                "click",
+
+                () => {
+
+                    resolverTaylor();
+                }
+            );
+
+        // =====================
+        // BOTÓN LIMPIAR
+        // =====================
+
+        document
+            .getElementById(
+                "btn-limpiar"
+            )
+            .addEventListener(
+
+                "click",
+
+                limpiarTaylor
+            );
+    }
+);
+
+// =====================
+// PREVIEW LATEX
+// =====================
+
+function actualizarPreview() {
+
+    const field =
+        document.getElementById(
+            "funcion-taylor"
+        );
+
+    const preview =
+        document.getElementById(
+            "preview-latex"
+        );
+
+    preview.innerHTML =
+
+    `
+    $$f(x)=${field.value}$$
+    `;
+
+    refrescarMathJax();
+}
+
+// =====================
+// EJEMPLOS
+// =====================
+
+function setEjemplo(
+    valor
+) {
+
+    const field =
+        document.getElementById(
+            "funcion-taylor"
+        );
+
+    field.value =
+        valor;
+
+    actualizarPreview();
+}
+
+// =====================
+// REFRESCAR MATHJAX
+// =====================
+
+function refrescarMathJax() {
+
+    if (
+
+        window.MathJax
+
+        &&
+
+        MathJax.typesetPromise
+
+    ) {
+
+        MathJax.typesetPromise();
+    }
+}
+
+</script>
+
+</body>
+</html>

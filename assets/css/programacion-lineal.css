@@ -1,0 +1,70 @@
+:root{
+  --accent:#b91c1c;
+  --muted:#f7f7f7;
+  --card-radius:18px;
+}
+
+.pl-page .container{
+  max-width:1400px;
+  width: calc(100% - 80px);
+  margin:18px auto;
+  display:grid;
+  grid-template-columns: 1fr;
+  gap:18px;
+  align-items:stretch;
+}
+
+.pl-page .main-content .card{ margin-bottom:0; }
+
+.funcion-wrapper{ display:flex; align-items:center; gap:12px; }
+.funcion-label{ width:40px; font-weight:700; color:var(--accent); }
+
+/* math-field sizing */
+math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; box-shadow:none; border:1px solid #eee; background:#fff; }
+
+.preview-box{ background:transparent; color:#333; padding-top:6px; }
+
+.constraint-bracket{ background:var(--muted); border-radius:10px; padding:10px; min-height:56px; font-size:1rem; }
+
+.acciones-container{ display:flex; gap:8px; margin-top:8px; }
+.acciones-container button{ background:var(--accent); color:white; border:none; padding:8px 12px; border-radius:10px; cursor:pointer; }
+.acciones-container button:hover{ filter:brightness(.95); }
+
+/* Steps area */
+#steps{ display:flex; flex-direction:column; gap:12px; }
+#steps .step-card{ background:white; border-radius:12px; padding:10px; box-shadow:0 6px 18px rgba(0,0,0,0.06); }
+.simplex-table{ overflow-x:auto; padding:8px 0; }
+.row-operations{ background:#fff7ed; border-left:4px solid #f59e0b; padding:10px; border-radius:6px; }
+.simplex-solution{ background:#ecfdf5; border-left:4px solid #16a34a; padding:12px; border-radius:8px; }
+.verification-box{ background:#f8fafc; border-radius:10px; padding:12px; line-height:1.6; }
+.verification-box.ok{ background:#ecfdf5; border-left:4px solid #16a34a; }
+.verification-box.error{ background:#fef2f2; border-left:4px solid #dc2626; }
+.verification-box.warning{ background:#fff7ed; border-left:4px solid #f59e0b; }
+.simplex-unbounded{ background:#fff7ed !important; border-left:4px solid #f59e0b; }
+
+/* render-input */
+#render-input{ background:linear-gradient(180deg,#fff 0%, #fffaf0 100%); padding:12px; border-radius:12px; }
+
+/* status */
+.status{ color:var(--accent); font-weight:600; margin-top:8px; }
+
+/* layout overrides for PL page to stack content vertically */
+.pl-page .matrix-layout{ display:block; padding:0 20px; }
+.pl-page aside.sidebar{ position:relative; top:0; width:100%; min-width:0; margin:0 auto 8px; box-shadow:none; background:transparent; border:none; }
+.pl-page .sidebar{ width:auto; padding:0; }
+.pl-page .card{ width:100%; box-sizing:border-box; }
+
+/* math-field inner font size */
+math-field::part(text){ font-size:18px; }
+
+/* card widths and spacing */
+.pl-page .funcion-box, .pl-page .card{ padding:18px; border-radius:12px; }
+
+/* buttons */
+.acciones-container button.secondary{ background:#ffffff; color:var(--accent); border:1px solid #f3d4d4; }
+
+/* Steps card latex rendering */
+.step-card .latex{ padding:6px 4px; }
+
+/* responsive */
+@media(max-width:900px){ .pl-page .container{ grid-template-columns: 1fr; width: calc(100% - 40px); } .pl-page aside.sidebar{ order:-1; } }
