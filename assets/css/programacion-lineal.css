@@ -34,6 +34,7 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 #steps{ display:flex; flex-direction:column; gap:12px; }
 #steps .step-card{ background:white; border-radius:12px; padding:10px; box-shadow:0 6px 18px rgba(0,0,0,0.06); }
 .simplex-table{ overflow-x:auto; padding:8px 0; }
+.big-m-objective{ background:#eff6ff; border-left:4px solid #2563eb; padding:10px; border-radius:6px; }
 .row-operations{ background:#fff7ed; border-left:4px solid #f59e0b; padding:10px; border-radius:6px; }
 .simplex-solution{ background:#ecfdf5; border-left:4px solid #16a34a; padding:12px; border-radius:8px; }
 .verification-box{ background:#f8fafc; border-radius:10px; padding:12px; line-height:1.6; }
@@ -41,6 +42,11 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 .verification-box.error{ background:#fef2f2; border-left:4px solid #dc2626; }
 .verification-box.warning{ background:#fff7ed; border-left:4px solid #f59e0b; }
 .simplex-unbounded{ background:#fff7ed !important; border-left:4px solid #f59e0b; }
+.phase-heading{ background:#fefce8; border-left:4px solid #ca8a04; padding:10px; border-radius:6px; }
+.phase-card{ border-left:4px solid #7c3aed; }
+.pivot-cell{ color: #f97316; }
+
+.config-item select{ min-width:180px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; background:#fff; }
 
 /* render-input */
 #render-input{ background:linear-gradient(180deg,#fff 0%, #fffaf0 100%); padding:12px; border-radius:12px; }

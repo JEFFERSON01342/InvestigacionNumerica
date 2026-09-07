@@ -9,10 +9,21 @@
     <link rel="stylesheet" href="../../assets/css/programacion-lineal.css?v=20260813-1">
     <link rel="icon" type="image/png" href="../../assets/img/logo.png">
 
-    <script src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/mathlive.min.js"></script>
+    <script src="https://unpkg.com/mathlive@0.110.0"></script>
 
     <script src="https://www.desmos.com/api/v1.11/calculator.js?apiKey=95ae3c138c5845289c3d45408fc8839f"></script>
     <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script>
+        window.MathJax = {
+            loader: {
+                // \class{...}{...} usado para resaltar la celda pivote.
+                load: ['[tex]/html']
+            },
+            tex: {
+                packages: {'[+]': ['html']}
+            }
+        };
+    </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body class="pl-page">
@@ -33,7 +44,7 @@
     </div>
     <div class="hero-text">
         <h2>Programación Lineal</h2>
-        <p>Método Simplex paso a paso con entrada LaTeX.</p>
+        <p>Métodos Simplex, Gran M y Dos Fases paso a paso con entrada LaTeX.</p>
     </div>
 </header>
 
@@ -48,6 +59,20 @@
                         <div>
                             <label><input type="radio" name="sense-pl" value="max" checked> Maximizar</label>
                             <label><input type="radio" name="sense-pl" value="min"> Minimizar</label>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <label for="method-pl">Método</label>
+                        <select id="method-pl">
+                            <option value="big-m" selected>Gran M</option>
+                            <option value="two-phase">Dos Fases</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label>Signo de variables</label>
+                        <div>
+                            <label><input type="radio" name="variable-domain-pl" value="nonnegative" checked> x, y ≥ 0</label>
+                            <label><input type="radio" name="variable-domain-pl" value="free"> Variables libres (positivas o negativas)</label>
                         </div>
                     </div>
                 </div>
@@ -120,8 +145,8 @@
     </aside>
 </main>
 
-<script src="../../assets/js/programacion-lineal/render.js?v=20260813-6"></script>
-<script src="../../assets/js/programacion-lineal/patch.js?v=20260813-6"></script>
+<script src="../../assets/js/programacion-lineal/render.js?v=20260906-1"></script>
+<script src="../../assets/js/programacion-lineal/patch.js?v=20260906-5"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{

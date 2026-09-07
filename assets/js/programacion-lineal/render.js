@@ -112,22 +112,106 @@ function collectVars(obj, constraints){
 }
 
 function buildTableau(obj, constraints){
-  const vars = collectVars(obj, constraints); const m = constraints.length; const n = vars.length;
-  const A = []; const b = []; const slackNames = [];
-  for(let i=0;i<m;i++){
-    const row = new Array(n).fill(0); const c = constraints[i];
-    for(let j=0;j<n;j++) row[j] = c.coeffs[vars[j]] || 0;
-    let rhs = c.rhs; if(c.op === '>='){ for(let j=0;j<n;j++) row[j] = -row[j]; rhs = -rhs; }
-    A.push(row); b.push(rhs); slackNames.push('s'+(i+1));
-  }
-  let cvec = new Array(n).fill(0); for(let j=0;j<n;j++) cvec[j] = obj.coeffs[vars[j]] || 0; if(obj.sense === 'min') cvec = cvec.map(v=>-v);
-  const tableau = [];
-  for(let i=0;i<m;i++){ const row = {coeffs: A[i].slice(), slack: new Array(m).fill(0), rhs: b[i], basic: slackNames[i]}; row.slack[i]=1; tableau.push(row); }
-  const objRow = {coeffs: cvec.slice(), slack: new Array(m).fill(0), rhs: 0, basic: 'z'}; objRow.coeffs = objRow.coeffs.map(v=> -v);
-  return {vars, slackNames, tableau, objRow};
+  const originalVars = collectVars(obj, constraints);
+  const freeVariables = obj.variableDomain === 'free';
+  const vars = freeVariables
+    ? originalVars.flatMap(variable => [`${variable}+`, `${variable}-`])
+    : originalVars.slice();
+  const variableMap = Object.fromEntries(originalVars.map((variable, index) => [
+    variable,
+    freeVariables ? { positive: index * 2, negative: index * 2 + 1 } : { positive: index, negative: null }
+  ]));
+  const m = constraints.length;
+  const n = vars.length;
+  const slackNames = [];
+  const rows = [];
+  const artificialColumns = [];
+  const normalizedConstraints = constraints.map(constraint => {
+    if(constraint.rhs >= 0) return {...constraint, coeffs: {...constraint.coeffs}};
+    const reversed = { '<=': '>=', '>=': '<=', '=': '=' }[constraint.op];
+    return {
+      op: reversed,
+      rhs: -constraint.rhs,
+      coeffs: Object.fromEntries(Object.entries(constraint.coeffs).map(([variable, coefficient]) => [variable, -coefficient]))
+    };
+  });
+
+  normalizedConstraints.forEach((constraint, rowIndex) => {
+    const row = new Array(n).fill(0);
+    originalVars.forEach(variable => {
+      const coefficient = constraint.coeffs[variable] || 0;
+      const mapping = variableMap[variable];
+      row[mapping.positive] = coefficient;
+      if(mapping.negative !== null) row[mapping.negative] = -coefficient;
+    });
+    let basic;
+    if(constraint.op === '<='){
+      basic = `S${rowIndex + 1}`;
+      slackNames.push(basic);
+      rows.push({ coeffs: row, extra: [{name: basic, value: 1}], rhs: constraint.rhs, basic });
+    } else if(constraint.op === '>='){
+      const excess = `E${rowIndex + 1}`;
+      const artificial = `A${rowIndex + 1}`;
+      slackNames.push(excess, artificial);
+      artificialColumns.push(slackNames.length - 1);
+      rows.push({
+        coeffs: row,
+        extra: [{name: excess, value: -1}, {name: artificial, value: 1}],
+        rhs: constraint.rhs,
+        basic: artificial
+      });
+    } else {
+      const artificial = `A${rowIndex + 1}`;
+      slackNames.push(artificial);
+      artificialColumns.push(slackNames.length - 1);
+      rows.push({ coeffs: row, extra: [{name: artificial, value: 1}], rhs: constraint.rhs, basic: artificial });
+    }
+  });
+
+  const extraCount = slackNames.length;
+  const tableau = rows.map(row => {
+    const slack = new Array(extraCount).fill(0);
+    row.extra.forEach(item => { slack[slackNames.indexOf(item.name)] = item.value; });
+    return { coeffs: row.coeffs.slice(), slack, rhs: row.rhs, basic: row.basic };
+  });
+
+  const objectiveDirection = obj.sense === 'min' ? -1 : 1;
+  const cvec = originalVars.flatMap(variable => {
+    const coefficient = objectiveDirection * (obj.coeffs[variable] || 0);
+    return freeVariables ? [coefficient, -coefficient] : [coefficient];
+  });
+  const bigM = 1000000;
+  const objRow = {
+    coeffs: cvec.map(value => -value),
+    slack: new Array(extraCount).fill(0),
+    rhs: 0,
+    basic: 'Z'
+  };
+  artificialColumns.forEach(column => { objRow.slack[column] = bigM; });
+  tableau.forEach((row, rowIndex) => {
+    if(!artificialColumns.includes(slackNames.indexOf(row.basic))) return;
+    const factor = objRow.slack[slackNames.indexOf(row.basic)];
+    objRow.coeffs = objRow.coeffs.map((value, column) => value - factor * row.coeffs[column]);
+    objRow.slack = objRow.slack.map((value, column) => value - factor * row.slack[column]);
+    objRow.rhs -= factor * row.rhs;
+  });
+  return {
+    vars,
+    slackNames,
+    tableau,
+    objRow,
+    bigM,
+    objectiveDirection,
+    objectiveSense: obj.sense || 'max',
+    objectiveCoeffs: {...obj.coeffs},
+    originalVars,
+    variableMap,
+    freeVariables,
+    objectiveVector: Object.fromEntries(vars.map((variable, index) => [variable, cvec[index]]))
+  };
 }
 
-function cloneTableauState(vars, slackNames, tableau, objRow){ return { vars: vars.slice(), slackNames: slackNames.slice(), tableau: tableau.map(r=>({coeffs:r.coeffs.slice(), slack:r.slack.slice(), rhs:r.rhs, basic:r.basic})), objRow: {coeffs: objRow.coeffs.slice(), slack: objRow.slack.slice(), rhs: objRow.rhs, basic: objRow.basic} }; }
+function cloneTableauState(vars, slackNames, tableau, objRow, metadata = {}){ return { vars: vars.slice(), slackNames: slackNames.slice(), tableau: tableau.map(r=>({coeffs:r.coeffs.slice(), slack:r.slack.slice(), rhs:r.rhs, basic:r.basic})), objRow: {coeffs: objRow.coeffs.slice(), slack: objRow.slack.slice(), rhs: objRow.rhs, basic: objRow.basic}, ...metadata }; }
 
 function findEntering(objRow){ let minVal=0, idx=-1; for(let j=0;j<objRow.coeffs.length;j++){ const v=objRow.coeffs[j]; if(v<minVal){ minVal=v; idx=j; } } return idx; }
 function findLeaving(tableau, enteringIndex){ let bestRatio=Infinity, rowIdx=-1; for(let i=0;i<tableau.length;i++){ const aij=tableau[i].coeffs[enteringIndex]; if(aij>0){ const ratio=tableau[i].rhs/aij; if(ratio>=0 && ratio<bestRatio){ bestRatio=ratio; rowIdx=i; } } } return rowIdx; }
@@ -151,16 +235,21 @@ function pivotOn(state, enteringIndex, leavingRowIdx){ const T=state.tableau; co
   return opInfo;
 }
 
-function simplexSteps(obj, constraints){ const built=buildTableau(obj,constraints); let vars=built.vars, slackNames=built.slackNames, tableau=built.tableau, objRow=built.objRow; const fullSteps=[]; // push initial
-  fullSteps.push({type:'initial', state: cloneTableauState(vars, slackNames, tableau, objRow)});
+function simplexSteps(obj, constraints){ const built=buildTableau(obj,constraints); let vars=built.vars, slackNames=built.slackNames, tableau=built.tableau, objRow=built.objRow; const metadata = {
+  objectiveDirection: built.objectiveDirection,
+  bigM: built.bigM,
+  objectiveSense: built.objectiveSense,
+  objectiveCoeffs: built.objectiveCoeffs
+}; const fullSteps=[]; // push initial
+  fullSteps.push({type:'initial', state: cloneTableauState(vars, slackNames, tableau, objRow, metadata)});
   for(let iter=0;iter<200;iter++){
     const entering=findEntering(objRow);
     if(entering===-1) break; // optimal
     const leaving=findLeaving(tableau, entering);
     if(leaving===-1) throw new Error('Problema no acotado (unbounded)');
-    const before = cloneTableauState(vars, slackNames, tableau, objRow);
+    const before = cloneTableauState(vars, slackNames, tableau, objRow, metadata);
     const opInfo = pivotOn({vars, slackNames, tableau, objRow}, entering, leaving);
-    const after = cloneTableauState(vars, slackNames, tableau, objRow);
+    const after = cloneTableauState(vars, slackNames, tableau, objRow, metadata);
     fullSteps.push({type:'pivot', before: before, op: opInfo, after: after});
   }
   return fullSteps;
@@ -187,7 +276,22 @@ function renderStepsLatex(steps){ const container=$id('steps'); container.innerH
   // solution
   const last = steps[steps.length-1]; const sol = computeSolutionFromTable(last); const vdiv=document.createElement('div'); vdiv.innerHTML = '<h4>Solución</h4>' + sol.vars.map(s=>`$${s.var} = ${formatNum(s.value)}$`).join('<br>') + `<br> $Z = ${formatNum(sol.Z)}$`; container.appendChild(vdiv); if(window.MathJax) MathJax.typesetPromise(); }
 
-function computeSolutionFromTable(st){ const res=[]; for(const v of st.vars){ let val=0; for(const row of st.tableau){ if(row.basic===v){ val=row.rhs; break; } } res.push({var:v, value: val}); } const Z = st.objRow.rhs; return {vars: res, Z}; }
+function computeSolutionFromTable(st){
+  const res=[];
+  const originalVars = st.originalVars || st.vars;
+  for(const variable of originalVars){
+    const mapping = st.variableMap && st.variableMap[variable];
+    const columns = mapping ? [st.vars[mapping.positive], st.vars[mapping.negative]].filter(Boolean) : [variable];
+    const values = columns.map(column => {
+      const row = st.tableau.find(item => item.basic === column);
+      return row ? row.rhs : 0;
+    });
+    res.push({var: variable, value: values[0] - (values[1] || 0)});
+  }
+  const direction = st.objectiveDirection || 1;
+  const infeasible = st.tableau.some(row => /^A\d+$/.test(row.basic) && Math.abs(row.rhs) > 1e-7);
+  return {vars: res, Z: st.objRow.rhs * direction, infeasible};
+}
 
 // wire buttons to math-field inputs
 function initPLUI(){ const objField = $id('objective-field'); const consField = $id('constraint-field'); const addBtn = $id('btn-add-constraint'); const clearConsBtn = $id('btn-clear-constraints'); const calcBtn = $id('btn-calc-pl'); const clearAllBtn = $id('btn-clear-all'); const status = $id('status'); renderConstraintBracket(constraintsLatex);
@@ -201,6 +305,7 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
     status.textContent = 'Procesando...';
     try{
       const sense = document.querySelector('input[name="sense-pl"]:checked').value;
+      const variableDomain = document.querySelector('input[name="variable-domain-pl"]:checked').value;
       const objLatex = objField.value.trim();
       console.log('Calcular Simplex triggered, objective:', objLatex, 'sense:', sense, 'constraints:', constraintsLatex);
       if(!objLatex) throw new Error('Ingrese la función objetivo.');
@@ -208,27 +313,38 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       const objAscii = latexToAscii(objLatex);
       console.log('Objective ASCII:', objAscii);
       const obj = parseObjective((sense? sense+': ':'') + objAscii);
+      obj.variableDomain = variableDomain;
       const consAsciiLines = consL.map(l=> latexToAscii(l));
       console.log('Constraints ASCII lines:', consAsciiLines);
       const parsedConstraints = parseConstraints(consAsciiLines.join('\n'));
       // x ≥ 0, y ≥ 0, ... ya son condiciones propias del simplex estándar;
       // no se agregan como filas artificiales de tipo ≥ al tableau.
-      const implicitNonNegative = parsedConstraints.filter(constraint => typeof isImplicitNonNegativity === 'function' && isImplicitNonNegativity(constraint));
-      const cons = parsedConstraints.filter(constraint => !(typeof isImplicitNonNegativity === 'function' && isImplicitNonNegativity(constraint)));
+      const implicitNonNegative = variableDomain === 'nonnegative'
+        ? parsedConstraints.filter(constraint => typeof isImplicitNonNegativity === 'function' && isImplicitNonNegativity(constraint))
+        : [];
+      const cons = variableDomain === 'nonnegative'
+        ? parsedConstraints.filter(constraint => !(typeof isImplicitNonNegativity === 'function' && isImplicitNonNegativity(constraint)))
+        : parsedConstraints;
       console.log('Parsed constraints:', cons);
-      const preflight = validateSimplexModel(obj, cons, sense);
+      const method = $id('method-pl') ? $id('method-pl').value : 'big-m';
+      const preflight = validateSimplexModel(obj, cons, sense, method);
       if(implicitNonNegative.length) preflight.notes.push(`Se reconocieron ${implicitNonNegative.length} condición(es) de no negatividad implícita(s).`);
       renderPreflightReport(preflight);
       if(!preflight.ok) throw new Error('El modelo no puede resolverse con el simplex estándar. Revisa la comprobación previa.');
-      const steps = simplexSteps(obj, cons);
+      const steps = method === 'two-phase' ? twoPhaseSteps(obj, cons) : simplexSteps(obj, cons);
       console.log('Simplex produced steps count:', steps.length);
       if(!steps || steps.length===0){ status.textContent='No se generaron pasos (revisar entrada).'; return; }
       renderStepsLatex(steps);
       const lastState = steps[steps.length - 1].after || steps[steps.length - 1].state;
-      if(steps[steps.length - 1].type === 'unbounded') renderUnboundedVerification();
-      else renderResultVerification(computeSolutionFromTable(lastState), obj, cons);
+      if(steps[steps.length - 1].type === 'unbounded') {
+        renderUnboundedVerification();
+      } else {
+        const solution = computeSolutionFromTable({...lastState, variableDomain});
+        if(solution.infeasible) renderInfeasibleVerification();
+        else renderResultVerification(solution, obj, cons);
+      }
       const built = buildTableau(obj, cons);
-      obj.vars = built.vars;
+      obj.vars = built.originalVars || built.vars;
       plot2vars(obj, cons);
       status.textContent = steps[steps.length - 1].type === 'unbounded' ? 'Proceso terminado: el problema no está acotado.' : 'Proceso completado.';
     }catch(e){

@@ -61,7 +61,16 @@ function pivotOn(state, enteringIndex, leavingRowIdx){
 function simplexSteps(obj, constraints){
   const built = buildTableau(obj, constraints);
   const state = { vars: built.vars, slackNames: built.slackNames, tableau: built.tableau, objRow: built.objRow };
-  const steps = [{ type: 'initial', state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow) }];
+  const metadata = {
+    objectiveDirection: built.objectiveDirection,
+    bigM: built.bigM,
+    objectiveSense: built.objectiveSense,
+    objectiveCoeffs: built.objectiveCoeffs,
+    originalVars: built.originalVars,
+    variableMap: built.variableMap,
+    freeVariables: built.freeVariables
+  };
+  const steps = [{ type: 'initial', state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata) }];
 
   for(let iteration = 0; iteration < 200; iteration++){
     const enteringIndex = findEntering(state.objRow);
@@ -70,24 +79,112 @@ function simplexSteps(obj, constraints){
     // No se detiene antes de renderizar: se conserva la tabla que evidencia
     // que la variable entrante no posee una razón positiva para salir.
     if(leavingRowIdx === -1){
-      steps.push({ type: 'unbounded', state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow), enteringIndex });
+      steps.push({ type: 'unbounded', state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata), enteringIndex });
       return steps;
     }
-    const before = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow);
+    const before = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata);
     const operation = pivotOn(state, enteringIndex, leavingRowIdx);
-    const after = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow);
+    const after = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata);
     steps.push({ type: 'pivot', before, operation, after });
   }
   throw new Error('Se alcanzó el límite de 200 iteraciones.');
 }
 
-function validateSimplexModel(obj, constraints, sense){
+function setObjectiveRow(state, variableCoeffs, slackCoeffs, rhs){
+  state.objRow = {
+    coeffs: state.vars.map(variable => variableCoeffs[variable] || 0),
+    slack: state.slackNames.map(name => slackCoeffs[name] || 0),
+    rhs: rhs || 0,
+    basic: 'Z'
+  };
+  state.tableau.forEach(row => {
+    const basicIndex = state.vars.indexOf(row.basic);
+    const slackIndex = state.slackNames.indexOf(row.basic);
+    const factor = basicIndex >= 0 ? state.objRow.coeffs[basicIndex] : state.objRow.slack[slackIndex];
+    if(Math.abs(factor || 0) < 1e-12) return;
+    state.objRow.coeffs = state.objRow.coeffs.map((value, index) => value - factor * row.coeffs[index]);
+    state.objRow.slack = state.objRow.slack.map((value, index) => value - factor * row.slack[index]);
+    state.objRow.rhs -= factor * row.rhs;
+  });
+}
+
+function appendSimplexPhaseSteps(state, metadata, steps, phase){
+  for(let iteration = 0; iteration < 200; iteration++){
+    const enteringIndex = phase === 2
+      ? findEnteringWithoutArtificial(state)
+      : findEntering(state.objRow);
+    if(enteringIndex === -1) return;
+    const leavingRowIdx = findLeaving(state.tableau, enteringIndex);
+    if(leavingRowIdx === -1){
+      steps.push({ type: 'unbounded', phase, state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase}) , enteringIndex });
+      return;
+    }
+
+    function findEnteringWithoutArtificial(state){
+      const values = [...state.objRow.coeffs, ...state.objRow.slack];
+      let minimum = 0;
+      let index = -1;
+      values.forEach((value, column) => {
+        const name = tableauColumnName(state, column);
+        if(/^A\d+$/.test(name)) return;
+        if(value < minimum){ minimum = value; index = column; }
+      });
+      return index;
+    }
+    const before = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase});
+    const operation = pivotOn(state, enteringIndex, leavingRowIdx);
+    const after = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase});
+    steps.push({ type: 'pivot', phase, before, operation, after });
+  }
+  throw new Error('Se alcanzó el límite de 200 iteraciones en la Fase ' + phase + '.');
+}
+
+function twoPhaseSteps(obj, constraints){
+  const built = buildTableau(obj, constraints);
+  const state = { vars: built.vars, slackNames: built.slackNames, tableau: built.tableau, objRow: built.objRow };
+  const artificialNames = state.slackNames.filter(name => /^A\d+$/.test(name));
+  const artificialCoeffs = Object.fromEntries(artificialNames.map(name => [name, 1]));
+  const metadata = {
+    method: 'two-phase',
+    objectiveDirection: built.objectiveDirection,
+    objectiveSense: built.objectiveSense,
+    objectiveCoeffs: built.objectiveCoeffs,
+    originalVars: built.originalVars,
+    variableMap: built.variableMap,
+    freeVariables: built.freeVariables
+  };
+  setObjectiveRow(state, {}, artificialCoeffs, 0);
+  const steps = [{ type: 'initial', phase: 1, state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase: 1}) }];
+  appendSimplexPhaseSteps(state, metadata, steps, 1);
+  const phaseOneState = steps[steps.length - 1];
+  const phaseOneTableau = phaseOneState.after || phaseOneState.state;
+  if(phaseOneState.type === 'unbounded' || phaseOneTableau.objRow.rhs < -1e-7){
+    return steps;
+  }
+
+  steps.push({
+    type: 'phase',
+    phase: 2,
+    state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase: 2})
+  });
+  const objectiveCoeffs = Object.fromEntries(state.vars.map(variable => [
+    variable,
+    -(built.objectiveVector[variable] || 0)
+  ]));
+  setObjectiveRow(state, objectiveCoeffs, {}, 0);
+  const phaseTwoInitial = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase: 2});
+  steps[steps.length - 1].state = phaseTwoInitial;
+  appendSimplexPhaseSteps(state, metadata, steps, 2);
+  return steps;
+}
+
+function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
   const issues = [];
   const notes = [];
   if(!constraints.length) issues.push('Debes añadir al menos una restricción.');
   constraints.forEach((constraint, index) => {
-    if(constraint.op !== '<=') issues.push(`R${index + 1} usa ${constraint.op}; por ahora el método requiere restricciones ≤.`);
-    if(!Number.isFinite(constraint.rhs) || constraint.rhs < 0) issues.push(`R${index + 1} tiene un lado derecho negativo. Requiere transformación previa.`);
+    if(!['<=', '>=', '='].includes(constraint.op)) issues.push(`R${index + 1} usa un operador no válido.`);
+    if(!Number.isFinite(constraint.rhs)) issues.push(`R${index + 1} tiene un lado derecho inválido.`);
   });
   const variables = collectVars(obj, constraints);
   if(!variables.length) issues.push('La función objetivo no contiene variables.');
@@ -97,7 +194,11 @@ function validateSimplexModel(obj, constraints, sense){
     const limitsVariable = constraints.some(constraint => (constraint.coeffs[variable] || 0) > 1e-12);
     if(improves && !limitsVariable) notes.push(`${variable} puede mejorar Z sin un límite superior aparente; el simplex lo comprobará mostrando sus iteraciones.`);
   });
-  if(!issues.length) notes.push('Restricciones compatibles con el simplex estándar: forma ≤ y lado derecho no negativo.');
+  if(!issues.length){
+    notes.push(method === 'two-phase'
+      ? 'Se aplicará Dos Fases: la Fase I encuentra una solución básica factible y la Fase II optimiza la función original.'
+      : 'Se aplicará Gran M: ≤ agrega holgura, ≥ agrega exceso y artificial, e igual agrega artificial.');
+  }
   if(!issues.length && !notes.length) notes.push('Cada dirección que mejora Z tiene al menos una restricción que la limita inicialmente.');
   return { ok: !issues.length, issues, notes };
 }
@@ -123,13 +224,40 @@ function renderResultVerification(solution, obj, constraints){
   const checks = constraints.map((constraint, index) => {
     const lhs = Object.entries(constraint.coeffs).reduce((total, [variable, coefficient]) => total + coefficient * (values[variable] || 0), 0);
     const valid = constraint.op === '<=' ? lhs <= constraint.rhs + 1e-7 : constraint.op === '>=' ? lhs >= constraint.rhs - 1e-7 : Math.abs(lhs - constraint.rhs) <= 1e-7;
-    return { index, lhs, valid };
+    const substitution = Object.entries(constraint.coeffs)
+      .filter(([, coefficient]) => Math.abs(coefficient) > 1e-12)
+      .map(([variable, coefficient]) => `${formatNum(coefficient)}(${formatNum(values[variable] || 0)})`)
+      .join(' + ')
+      .replace(/\+\s-\(/g, '- (');
+    return { index, lhs, valid, substitution };
   });
-  const nonNegative = solution.vars.every(item => item.value >= -1e-7);
+  const nonNegative = obj.variableDomain !== 'free' && solution.vars.every(item => item.value >= -1e-7);
   const z = Object.entries(obj.coeffs).reduce((total, [variable, coefficient]) => total + coefficient * (values[variable] || 0), 0);
-  const valid = nonNegative && checks.every(check => check.valid);
+  const valid = (obj.variableDomain === 'free' || nonNegative) && checks.every(check => check.valid);
   target.className = `verification-box ${valid ? 'ok' : 'error'}`;
-  target.innerHTML = `<strong>${valid ? 'Solución verificada.' : 'La solución no pasó la verificación.'}</strong><ul><li>Variables no negativas: ${nonNegative ? 'sí' : 'no'}.</li>${checks.map(check => `<li>R${check.index + 1}: lado izquierdo = ${formatNum(check.lhs)} — ${check.valid ? 'cumple' : 'no cumple'}.</li>`).join('')}<li>Valor comprobado: Z = ${formatNum(z)}.</li></ul>`;
+  const domainText = obj.variableDomain === 'free' ? 'variables libres' : `variables no negativas: ${nonNegative ? 'sí' : 'no'}`;
+  const variableChecks = solution.vars.map(item => {
+    const signCheck = obj.variableDomain === 'free' || item.value >= -1e-7;
+    return obj.variableDomain === 'free'
+      ? `<li>\\(${item.var} = ${formatNum(item.value)}\\) — puede ser positivo o negativo.</li>`
+      : `<li>\\(${item.var} = ${formatNum(item.value)} \\ge 0 \\;\\Rightarrow\\; ${signCheck ? '\\text{cumple}' : '\\text{no cumple}'}\\)</li>`;
+  }).join('');
+  const objectiveSubstitution = Object.entries(obj.coeffs)
+    .filter(([, coefficient]) => Math.abs(coefficient) > 1e-12)
+    .map(([variable, coefficient]) => `${formatNum(coefficient)}(${formatNum(values[variable] || 0)})`)
+    .join(' + ')
+    .replace(/\+\s-\(/g, '- (');
+  target.innerHTML = `<strong>${valid ? 'Solución verificada.' : 'La solución no pasó la verificación.'}</strong>
+    <p><strong>Dominio:</strong> ${domainText}.</p>
+    <ul>${variableChecks}</ul>
+    <p><strong>Sustitución en restricciones:</strong></p>
+    <ul>${checks.map(check => `<li>R${check.index + 1}: \\(${check.substitution || '0'} ${constraintOperatorLatex(constraints[check.index].op)} ${formatNum(constraints[check.index].rhs)} \\;\\Rightarrow\\; ${formatNum(check.lhs)} ${constraintOperatorLatex(constraints[check.index].op)} ${formatNum(constraints[check.index].rhs)}\\) — ${check.valid ? 'cumple' : 'no cumple'}.</li>`).join('')}</ul>
+    <p><strong>Objetivo:</strong> \\(Z = ${objectiveSubstitution || '0'} = ${formatNum(z)}\\).</p>`;
+  if(window.MathJax) window.MathJax.typesetPromise([target]);
+}
+
+function constraintOperatorLatex(operator){
+  return operator === '<=' ? '\\le' : operator === '>=' ? '\\ge' : '=';
 }
 
 function renderUnboundedVerification(){
@@ -139,20 +267,71 @@ function renderUnboundedVerification(){
   target.innerHTML = '<strong>No existe una solución óptima finita.</strong><br>La última variable entrante no tiene una fila saliente con coeficiente positivo; por ello Z puede crecer indefinidamente.';
 }
 
+function renderInfeasibleVerification(){
+  const target = $id('verification');
+  if(!target) return;
+  target.className = 'verification-box error';
+  target.innerHTML = '<strong>El modelo no tiene solución factible.</strong><br>Al finalizar Gran M, una variable artificial conserva un valor positivo; por tanto, las restricciones no pueden cumplirse simultáneamente.';
+}
+
+function formatBigM(value, state){
+  const bigM = state.bigM;
+  if(!bigM || !Number.isFinite(value)) return formatNum(value);
+  const mCoefficient = Math.round(value / bigM);
+  const constant = value - mCoefficient * bigM;
+  if(Math.abs(mCoefficient) < 1e-9) return formatNum(constant);
+  const parts = [];
+  if(mCoefficient === 1) parts.push('M');
+  else if(mCoefficient === -1) parts.push('-M');
+  else parts.push(`${formatNum(mCoefficient)}M`);
+  if(Math.abs(constant) >= 1e-7) parts.push(constant > 0 ? `+${formatNum(constant)}` : formatNum(constant));
+  return parts.join('');
+}
+
+function bigMObjectiveFormula(state){
+  const terms = Object.entries(state.objectiveCoeffs || {}).map(([variable, coefficient]) => {
+    const signed = coefficient < 0 ? `- ${formatNum(Math.abs(coefficient))}${variable}` : `+ ${formatNum(coefficient)}${variable}`;
+    return signed;
+  });
+  const artificialNames = state.slackNames.filter(name => /^A\d+$/.test(name));
+  if(artificialNames.length){
+    const penalty = state.objectiveSense === 'min' ? '+ ' : '- ';
+    terms.push(`${penalty}M(${artificialNames.join(' + ')})`);
+  }
+  return terms.join(' ').replace(/^\+ /, '').replace(/  +/g, ' ');
+}
+
+function orderedSlackIndexes(state){
+  const order = { E: 0, A: 1, S: 2 };
+  return state.slackNames
+    .map((name, index) => ({ name, index }))
+    .sort((left, right) => {
+      const leftPrefix = (left.name.match(/^[EAS]/i) || [''])[0].toUpperCase();
+      const rightPrefix = (right.name.match(/^[EAS]/i) || [''])[0].toUpperCase();
+      return (order[leftPrefix] - order[rightPrefix]) || left.name.localeCompare(right.name, undefined, { numeric: true });
+    })
+    .map(item => item.index);
+}
+
+function orderedSlackValues(values, indexes){
+  return indexes.map(index => values[index]);
+}
+
 function tableToLatexWithHighlight(state, highlight){
-  const columns = 'c' + 'r'.repeat(state.vars.length + state.slackNames.length + 1);
-  const headers = ['\\mathrm{BV}', ...state.vars, ...state.slackNames, '\\mathrm{RHS}'];
+  const columns = 'c' + 'r'.repeat(state.vars.length + state.slackNames.length + 2);
+  const slackIndexes = orderedSlackIndexes(state);
+  const headers = ['\\mathrm{Basicas}', 'Z', ...state.vars, ...slackIndexes.map(index => state.slackNames[index]), '\\mathrm{Solucion}'];
   let latex = `\\[\\begin{array}{${columns}} ${headers.join(' & ')} \\\\ \\hline `;
 
   state.tableau.forEach((row, rowIndex) => {
-    const values = [row.basic, ...row.coeffs, ...row.slack, row.rhs].map((value, columnIndex) => {
-      const formatted = typeof value === 'number' ? formatNum(value) : value;
-      return highlight && rowIndex === highlight.leavingRowIdx && columnIndex === highlight.enteringIndex + 1
-        ? `\\boxed{\\color{orange}{${formatted}}}` : formatted;
+    const values = [row.basic, 0, ...row.coeffs, ...orderedSlackValues(row.slack, slackIndexes), row.rhs].map((value, columnIndex) => {
+      const formatted = typeof value === 'number' ? formatBigM(value, state) : value;
+      return highlight && rowIndex === highlight.leavingRowIdx && columnIndex === highlight.enteringIndex + 2
+        ? `\\class{pivot-cell}{${formatted}}` : formatted;
     });
     latex += `${values.join(' & ')} \\\\ `;
   });
-  latex += `\\hline ${[state.objRow.basic, ...state.objRow.coeffs, ...state.objRow.slack, state.objRow.rhs].map(value => typeof value === 'number' ? formatNum(value) : value).join(' & ')} \\\\ \\end{array}\\]`;
+  latex += `\\hline ${[state.objRow.basic, 1, ...state.objRow.coeffs, ...orderedSlackValues(state.objRow.slack, slackIndexes), state.objRow.rhs].map(value => typeof value === 'number' ? formatBigM(value, state) : value).join(' & ')} \\\\ \\end{array}\\]`;
   return latex;
 }
 
@@ -163,12 +342,29 @@ function renderStepsLatex(steps){
 
   const initial = steps[0].state;
   container.insertAdjacentHTML('beforeend', '<h3>Tabla inicial</h3>');
+  if(initial.objectiveCoeffs && initial.method !== 'two-phase'){
+    container.insertAdjacentHTML('beforeend', `<p class="big-m-objective"><strong>Función penalizada:</strong> \\(Z = ${bigMObjectiveFormula(initial)}\\)</p>`);
+  }
+  if(initial.method === 'two-phase'){
+    container.insertAdjacentHTML('beforeend', '<p class="phase-heading"><strong>Fase I:</strong> minimizar la suma de las variables artificiales.</p>');
+  }
   const initialTable = document.createElement('div');
   initialTable.className = 'simplex-table';
   initialTable.innerHTML = tableToLatexWithHighlight(initial);
   container.appendChild(initialTable);
 
   steps.slice(1).forEach((step, index) => {
+    if(step.type === 'phase'){
+      const phaseCard = document.createElement('article');
+      phaseCard.className = 'step-card phase-card';
+      phaseCard.innerHTML = '<h3>Fase II</h3><p>Se eliminaron las variables artificiales de la función objetivo y se restaura la función objetivo original.</p>';
+      const phaseTable = document.createElement('div');
+      phaseTable.className = 'simplex-table';
+      phaseTable.innerHTML = tableToLatexWithHighlight(step.state);
+      phaseCard.appendChild(phaseTable);
+      container.appendChild(phaseCard);
+      return;
+    }
     if(step.type === 'unbounded'){
       const entering = tableauColumnName(step.state, step.enteringIndex);
       const warning = document.createElement('article');
@@ -186,7 +382,8 @@ function renderStepsLatex(steps){
     const leaving = before.tableau[operation.leavingRowIdx].basic;
     const card = document.createElement('article');
     card.className = 'step-card';
-    card.innerHTML = `<h3>Iteración ${index + 1}</h3>
+    const phaseLabel = step.phase ? `Fase ${step.phase}` : 'Gran M';
+    card.innerHTML = `<h3>${phaseLabel}: Iteración ${index + 1}</h3>
       <p>Entra <strong>${entering}</strong> (coeficiente negativo en Z) y sale <strong>${leaving}</strong> (menor razón positiva).</p>
       <p><strong>Pivote:</strong> fila ${operation.leavingRowIdx + 1}, columna ${entering}, valor ${formatNum(operation.pivot)}.</p>`;
     const highlighted = document.createElement('div');
@@ -217,8 +414,10 @@ function renderStepsLatex(steps){
   }
   const solution = computeSolutionFromTable(finalStep.after || finalStep.state);
   const solutionEl = document.createElement('div');
-  solutionEl.className = 'simplex-solution';
-  solutionEl.innerHTML = `<h3>Solución óptima</h3>${solution.vars.map(item => `\\(${item.var} = ${formatNum(item.value)}\\)`).join(', ')}<br>\\(Z = ${formatNum(solution.Z)}\\)`;
+  solutionEl.className = solution.infeasible ? 'simplex-solution simplex-unbounded' : 'simplex-solution';
+  solutionEl.innerHTML = solution.infeasible
+    ? '<h3>Modelo infactible</h3><p>La Fase I/penalización conserva una variable artificial positiva. No se puede aceptar esta tabla como solución del problema original.</p>'
+    : `<h3>Solución óptima</h3>${solution.vars.map(item => `\\(${item.var} = ${formatNum(item.value)}\\)`).join(', ')}<br>\\(Z = ${formatNum(solution.Z)}\\)`;
   container.appendChild(solutionEl);
   if(window.MathJax) MathJax.typesetPromise([container]);
 }
