@@ -3,6 +3,18 @@
 
 function $id(id){ return document.getElementById(id); }
 
+// MathJax se carga de forma asíncrona. Durante DOMContentLoaded solo existe
+// su objeto de configuración, por lo que typesetPromise aún puede no existir.
+function typesetMath(elements){
+  const render = () => {
+    if(typeof window.MathJax?.typesetPromise === 'function'){
+      window.MathJax.typesetPromise(elements).catch(error => console.warn('No se pudo renderizar MathJax:', error));
+    }
+  };
+  if(typeof window.MathJax?.typesetPromise === 'function') render();
+  else window.addEventListener('load', render, {once:true});
+}
+
 // --- Parser and solver (same logic as simplex) ---
 function normalizeMathExpression(raw){
   let text = (raw || '').toString().trim();
@@ -269,12 +281,12 @@ const constraintsLatex = []; // LaTeX strings
 function appendStepCard(html){ const container = $id('steps'); const card = document.createElement('div'); card.className='step-card'; card.innerHTML = html; container.appendChild(card); }
 
 
-function renderConstraintBracket(constraintsLatexLocal){ const el=$id('constraintBracket'); if(!constraintsLatexLocal.length){ el.innerHTML='\\(\\left\\{\\begin{array}{l} \\text{(vacío)}\\\\\\end{array}\\right.\\)'; if(window.MathJax) MathJax.typesetPromise(); return; } const body = constraintsLatexLocal.map(c=> c.replace(/\$/g,'')).join(' \\\\ '); const latex = `\\(\\left\\{\\begin{array}{l} ${body} \\\\ \\end{array}\\right.\\)`; el.innerHTML = latex; if(window.MathJax) MathJax.typesetPromise(); }
-function renderInputDisplay(sense,objLatex,constraintsLatexLocal){ const el=$id('render-input'); el.innerHTML=''; const senseText = sense==='max'?'Maximizar':'Minimizar'; const p=document.createElement('div'); p.innerHTML = `<strong>${senseText} Z = </strong> $${objLatex || ''}$`; el.appendChild(p); const br=document.createElement('div'); br.innerHTML='<strong>Restricciones:</strong>'; el.appendChild(br); const list=document.createElement('div'); list.innerHTML = constraintsLatexLocal.map(c=>`$${c}$`).join('<br>'); el.appendChild(list); if(window.MathJax) MathJax.typesetPromise(); }
+function renderConstraintBracket(constraintsLatexLocal){ const el=$id('constraintBracket'); if(!constraintsLatexLocal.length){ el.innerHTML='\\(\\left\\{\\begin{array}{l} \\text{(vacío)}\\\\\\end{array}\\right.\\)'; typesetMath(); return; } const body = constraintsLatexLocal.map(c=> c.replace(/\$/g,'')).join(' \\\\ '); const latex = `\\(\\left\\{\\begin{array}{l} ${body} \\\\ \\end{array}\\right.\\)`; el.innerHTML = latex; typesetMath(); }
+function renderInputDisplay(sense,objLatex,constraintsLatexLocal){ const el=$id('render-input'); el.innerHTML=''; const senseText = sense==='max'?'Maximizar':'Minimizar'; const p=document.createElement('div'); p.innerHTML = `<strong>${senseText} Z = </strong> $${objLatex || ''}$`; el.appendChild(p); const br=document.createElement('div'); br.innerHTML='<strong>Restricciones:</strong>'; el.appendChild(br); const list=document.createElement('div'); list.innerHTML = constraintsLatexLocal.map(c=>`$${c}$`).join('<br>'); el.appendChild(list); typesetMath(); }
 
-function renderStepsLatex(steps){ const container=$id('steps'); container.innerHTML=''; if(!steps || steps.length===0) return; const initial=steps[0]; const title0=document.createElement('h3'); title0.textContent='Tabla inicial'; container.appendChild(title0); const pre0=document.createElement('div'); pre0.innerHTML = tableToLatex(initial); container.appendChild(pre0); if(window.MathJax) MathJax.typesetPromise(); for(let s=1;s<steps.length;s++){ const st=steps[s]; const title=document.createElement('h3'); title.textContent = `Tabla ${s}`; container.appendChild(title); const beforeDiv=document.createElement('div'); beforeDiv.innerHTML = tableToLatex(steps[s-1]); container.appendChild(beforeDiv); const ops=document.createElement('div'); ops.innerHTML = `<strong>Operación:</strong> pivot aplicado.`; container.appendChild(ops); const afterDiv=document.createElement('div'); afterDiv.innerHTML = tableToLatex(st); container.appendChild(afterDiv); if(window.MathJax) MathJax.typesetPromise(); }
+function renderStepsLatex(steps){ const container=$id('steps'); container.innerHTML=''; if(!steps || steps.length===0) return; const initial=steps[0]; const title0=document.createElement('h3'); title0.textContent='Tabla inicial'; container.appendChild(title0); const pre0=document.createElement('div'); pre0.innerHTML = tableToLatex(initial); container.appendChild(pre0); typesetMath(); for(let s=1;s<steps.length;s++){ const st=steps[s]; const title=document.createElement('h3'); title.textContent = `Tabla ${s}`; container.appendChild(title); const beforeDiv=document.createElement('div'); beforeDiv.innerHTML = tableToLatex(steps[s-1]); container.appendChild(beforeDiv); const ops=document.createElement('div'); ops.innerHTML = `<strong>Operación:</strong> pivot aplicado.`; container.appendChild(ops); const afterDiv=document.createElement('div'); afterDiv.innerHTML = tableToLatex(st); container.appendChild(afterDiv); typesetMath(); }
   // solution
-  const last = steps[steps.length-1]; const sol = computeSolutionFromTable(last); const vdiv=document.createElement('div'); vdiv.innerHTML = '<h4>Solución</h4>' + sol.vars.map(s=>`$${s.var} = ${formatNum(s.value)}$`).join('<br>') + `<br> $Z = ${formatNum(sol.Z)}$`; container.appendChild(vdiv); if(window.MathJax) MathJax.typesetPromise(); }
+  const last = steps[steps.length-1]; const sol = computeSolutionFromTable(last); const vdiv=document.createElement('div'); vdiv.innerHTML = '<h4>Solución</h4>' + sol.vars.map(s=>`$${s.var} = ${formatNum(s.value)}$`).join('<br>') + `<br> $Z = ${formatNum(sol.Z)}$`; container.appendChild(vdiv); typesetMath(); }
 
 function computeSolutionFromTable(st){
   const res=[];

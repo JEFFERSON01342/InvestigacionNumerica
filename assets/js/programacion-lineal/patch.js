@@ -253,7 +253,7 @@ function renderResultVerification(solution, obj, constraints){
     <p><strong>Sustitución en restricciones:</strong></p>
     <ul>${checks.map(check => `<li>R${check.index + 1}: \\(${check.substitution || '0'} ${constraintOperatorLatex(constraints[check.index].op)} ${formatNum(constraints[check.index].rhs)} \\;\\Rightarrow\\; ${formatNum(check.lhs)} ${constraintOperatorLatex(constraints[check.index].op)} ${formatNum(constraints[check.index].rhs)}\\) — ${check.valid ? 'cumple' : 'no cumple'}.</li>`).join('')}</ul>
     <p><strong>Objetivo:</strong> \\(Z = ${objectiveSubstitution || '0'} = ${formatNum(z)}\\).</p>`;
-  if(window.MathJax) window.MathJax.typesetPromise([target]);
+  typesetMath([target]);
 }
 
 function constraintOperatorLatex(operator){
@@ -409,7 +409,7 @@ function renderStepsLatex(steps){
 
   const finalStep = steps[steps.length - 1];
   if(finalStep.type === 'unbounded'){
-    if(window.MathJax) MathJax.typesetPromise([container]);
+    typesetMath([container]);
     return;
   }
   const solution = computeSolutionFromTable(finalStep.after || finalStep.state);
@@ -419,7 +419,7 @@ function renderStepsLatex(steps){
     ? '<h3>Modelo infactible</h3><p>La Fase I/penalización conserva una variable artificial positiva. No se puede aceptar esta tabla como solución del problema original.</p>'
     : `<h3>Solución óptima</h3>${solution.vars.map(item => `\\(${item.var} = ${formatNum(item.value)}\\)`).join(', ')}<br>\\(Z = ${formatNum(solution.Z)}\\)`;
   container.appendChild(solutionEl);
-  if(window.MathJax) MathJax.typesetPromise([container]);
+  typesetMath([container]);
 }
 
 let simplexDesmos = null;

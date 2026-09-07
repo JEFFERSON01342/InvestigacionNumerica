@@ -145,8 +145,8 @@
     </aside>
 </main>
 
-<script src="../../assets/js/programacion-lineal/render.js?v=20260906-1"></script>
-<script src="../../assets/js/programacion-lineal/patch.js?v=20260906-5"></script>
+<script src="../../assets/js/programacion-lineal/render.js?v=20260906-2"></script>
+<script src="../../assets/js/programacion-lineal/patch.js?v=20260906-6"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -159,11 +159,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         field.smartMode = true;
         field.smartFence = true;
         field.virtualKeyboardMode = 'manual';
-        try {
-            field.setOptions && field.setOptions({ virtualKeyboardMode: 'manual', smartMode: true, smartFence: true });
-        } catch (e) {
-            console.warn('MathField setOptions warning', e);
-        }
     }
 
     configureMathField(objField);
@@ -173,11 +168,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     function updatePreview(){
         const value = objField && objField.value ? objField.value : '';
         previewObj.innerHTML = `$$Z=${value}$$`;
-        if(window.MathJax) MathJax.typesetPromise();
+        typesetMath();
     }
     objField.addEventListener('input', updatePreview);
     objField.addEventListener('input', ()=>{ if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs(); });
-    consField.addEventListener('input', ()=>{ if(window.MathJax) MathJax.typesetPromise(); });
+    consField.addEventListener('input', ()=>{ typesetMath(); });
 });
 </script>
 </body>
