@@ -68,6 +68,7 @@ function simplexSteps(obj, constraints){
     objectiveCoeffs: built.objectiveCoeffs,
     originalVars: built.originalVars,
     variableMap: built.variableMap,
+    variableDomains: built.variableDomains,
     freeVariables: built.freeVariables
   };
   const steps = [{ type: 'initial', state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata) }];
@@ -151,6 +152,7 @@ function twoPhaseSteps(obj, constraints){
     objectiveCoeffs: built.objectiveCoeffs,
     originalVars: built.originalVars,
     variableMap: built.variableMap,
+    variableDomains: built.variableDomains,
     freeVariables: built.freeVariables
   };
   setObjectiveRow(state, {}, artificialCoeffs, 0);
@@ -231,16 +233,26 @@ function renderResultVerification(solution, obj, constraints){
       .replace(/\+\s-\(/g, '- (');
     return { index, lhs, valid, substitution };
   });
-  const nonNegative = obj.variableDomain !== 'free' && solution.vars.every(item => item.value >= -1e-7);
   const z = Object.entries(obj.coeffs).reduce((total, [variable, coefficient]) => total + coefficient * (values[variable] || 0), 0);
-  const valid = (obj.variableDomain === 'free' || nonNegative) && checks.every(check => check.valid);
+  const domainChecks = solution.vars.map(item => {
+    const domain = obj.variableDomains?.[item.var] || 'nonnegative';
+    if(domain === 'nonpositive') return item.value <= 1e-7;
+    if(domain === 'zero') return Math.abs(item.value) <= 1e-7;
+    if(domain === 'free') return true;
+    return item.value >= -1e-7;
+  });
+  const valid = domainChecks.every(Boolean) && checks.every(check => check.valid);
   target.className = `verification-box ${valid ? 'ok' : 'error'}`;
-  const domainText = obj.variableDomain === 'free' ? 'variables libres' : `variables no negativas: ${nonNegative ? 'sí' : 'no'}`;
-  const variableChecks = solution.vars.map(item => {
-    const signCheck = obj.variableDomain === 'free' || item.value >= -1e-7;
-    return obj.variableDomain === 'free'
-      ? `<li>\\(${item.var} = ${formatNum(item.value)}\\) — puede ser positivo o negativo.</li>`
-      : `<li>\\(${item.var} = ${formatNum(item.value)} \\ge 0 \\;\\Rightarrow\\; ${signCheck ? '\\text{cumple}' : '\\text{no cumple}'}\\)</li>`;
+  const domainText = solution.vars.map(item => {
+    const domain = obj.variableDomains?.[item.var] || 'nonnegative';
+    const symbol = { nonnegative: '\\ge 0', nonpositive: '\\le 0', zero: '= 0', free: '\\in\\mathbb{R}' }[domain];
+    return `\\(${item.var} ${symbol}\\)`;
+  }).join(', ');
+  const variableChecks = solution.vars.map((item, index) => {
+    const domain = obj.variableDomains?.[item.var] || 'nonnegative';
+    const symbol = { nonnegative: '\\ge 0', nonpositive: '\\le 0', zero: '= 0', free: '\\in\\mathbb{R}' }[domain];
+    const signCheck = domainChecks[index];
+    return `<li>\\(${item.var} = ${formatNum(item.value)}\\), ${symbol} \\;\\Rightarrow\\; ${signCheck ? '\\text{cumple}' : '\\text{no cumple}'}</li>`;
   }).join('');
   const objectiveSubstitution = Object.entries(obj.coeffs)
     .filter(([, coefficient]) => Math.abs(coefficient) > 1e-12)
@@ -248,7 +260,7 @@ function renderResultVerification(solution, obj, constraints){
     .join(' + ')
     .replace(/\+\s-\(/g, '- (');
   target.innerHTML = `<strong>${valid ? 'Solución verificada.' : 'La solución no pasó la verificación.'}</strong>
-    <p><strong>Dominio:</strong> ${domainText}.</p>
+    <p><strong>Dominio:</strong> ${domainText || 'sin variables'}.</p>
     <ul>${variableChecks}</ul>
     <p><strong>Sustitución en restricciones:</strong></p>
     <ul>${checks.map(check => `<li>R${check.index + 1}: \\(${check.substitution || '0'} ${constraintOperatorLatex(constraints[check.index].op)} ${formatNum(constraints[check.index].rhs)} \\;\\Rightarrow\\; ${formatNum(check.lhs)} ${constraintOperatorLatex(constraints[check.index].op)} ${formatNum(constraints[check.index].rhs)}\\) — ${check.valid ? 'cumple' : 'no cumple'}.</li>`).join('')}</ul>
@@ -446,12 +458,32 @@ function plot2vars(obj, constraints){
   if(!obj.vars || obj.vars.length !== 2){ graph.setBlank(); return; }
 
   const [x, y] = obj.vars;
+  const variableDomains = obj.variableDomains || {};
   const magnitude = Math.max(10, ...constraints.map(c => Math.abs(c.rhs || 0)));
   const bound = Math.ceil(magnitude * 1.35);
   graph.setBlank();
-  graph.setMathBounds({ left: -1, right: bound, bottom: -1, top: bound });
-  graph.setExpression({ id: 'nonnegative-x', latex: `${x}\\ge0`, color: '#6b7280', fillOpacity: 0.03 });
-  graph.setExpression({ id: 'nonnegative-y', latex: `${y}\\ge0`, color: '#6b7280', fillOpacity: 0.03 });
+  const xHasNegativeValues = ['nonpositive', 'free'].includes(variableDomains[x]);
+  const yHasNegativeValues = ['nonpositive', 'free'].includes(variableDomains[y]);
+  graph.setMathBounds({
+    left: xHasNegativeValues ? -bound : -1,
+    right: bound,
+    bottom: yHasNegativeValues ? -bound : -1,
+    top: bound
+  });
+  [x, y].forEach(variable => {
+    const domain = variableDomains[variable] || 'nonnegative';
+    const restriction = {
+      nonnegative: `${variable}\\ge0`,
+      nonpositive: `${variable}\\le0`,
+      zero: `${variable}=0`
+    }[domain];
+    if(restriction) graph.setExpression({
+      id: `domain-${variable}`,
+      latex: restriction,
+      color: '#6b7280',
+      fillOpacity: 0.03
+    });
+  });
 
   constraints.forEach((constraint, index) => {
     const a = constraint.coeffs[x] || 0;
@@ -478,6 +510,7 @@ function updatePlotFromInputs(){
     const objective = parseObjective(`${sense}: ${latexToAscii(objectiveField.value)}`);
     const constraints = parseConstraints(constraintsLatex.map(latexToAscii).join('\n'));
     objective.vars = collectVars(objective, constraints);
+    objective.variableDomains = {...variableDomainsPL};
     plot2vars(objective, constraints);
   } catch (_) { /* La entrada aún se está escribiendo; se actualizará al completarla. */ }
 }

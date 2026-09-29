@@ -48,6 +48,11 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 
 .config-item select{ min-width:180px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; background:#fff; }
 
+.variable-domains{ display:grid; gap:8px; }
+.variable-domain-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.variable-domain-row label{ font-weight:600; }
+.variable-domain-row select{ min-width:220px; }
+
 /* render-input */
 #render-input{ background:linear-gradient(180deg,#fff 0%, #fffaf0 100%); padding:12px; border-radius:12px; }
 
@@ -74,3 +79,4 @@ math-field::part(text){ font-size:18px; }
 
 /* responsive */
 @media(max-width:900px){ .pl-page .container{ grid-template-columns: 1fr; width: calc(100% - 40px); } .pl-page aside.sidebar{ order:-1; } }
+@media(max-width:520px){ .variable-domain-row{ align-items:stretch; flex-direction:column; gap:4px; } .variable-domain-row select{ width:100%; } }

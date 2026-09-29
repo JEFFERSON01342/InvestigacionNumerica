@@ -125,14 +125,27 @@ function collectVars(obj, constraints){
 
 function buildTableau(obj, constraints){
   const originalVars = collectVars(obj, constraints);
-  const freeVariables = obj.variableDomain === 'free';
-  const vars = freeVariables
-    ? originalVars.flatMap(variable => [`${variable}+`, `${variable}-`])
-    : originalVars.slice();
-  const variableMap = Object.fromEntries(originalVars.map((variable, index) => [
-    variable,
-    freeVariables ? { positive: index * 2, negative: index * 2 + 1 } : { positive: index, negative: null }
-  ]));
+  const variableDomains = obj.variableDomains || {};
+  const defaultDomain = obj.variableDomain === 'free' ? 'free' : 'nonnegative';
+  const vars = [];
+  const variableMap = Object.fromEntries(originalVars.map(variable => {
+    const domain = variableDomains[variable] || defaultDomain;
+    if(domain === 'zero') return [variable, { positive: null, negative: null }];
+    if(domain === 'nonpositive'){
+      const negative = vars.length;
+      vars.push(`${variable}-`);
+      return [variable, { positive: null, negative }];
+    }
+    if(domain === 'free'){
+      const positive = vars.length;
+      const negative = positive + 1;
+      vars.push(`${variable}+`, `${variable}-`);
+      return [variable, { positive, negative }];
+    }
+    const positive = vars.length;
+    vars.push(variable);
+    return [variable, { positive, negative: null }];
+  }));
   const m = constraints.length;
   const n = vars.length;
   const slackNames = [];
@@ -153,7 +166,7 @@ function buildTableau(obj, constraints){
     originalVars.forEach(variable => {
       const coefficient = constraint.coeffs[variable] || 0;
       const mapping = variableMap[variable];
-      row[mapping.positive] = coefficient;
+      if(mapping.positive !== null) row[mapping.positive] = coefficient;
       if(mapping.negative !== null) row[mapping.negative] = -coefficient;
     });
     let basic;
@@ -188,9 +201,12 @@ function buildTableau(obj, constraints){
   });
 
   const objectiveDirection = obj.sense === 'min' ? -1 : 1;
-  const cvec = originalVars.flatMap(variable => {
+  const cvec = new Array(vars.length).fill(0);
+  originalVars.forEach(variable => {
     const coefficient = objectiveDirection * (obj.coeffs[variable] || 0);
-    return freeVariables ? [coefficient, -coefficient] : [coefficient];
+    const mapping = variableMap[variable];
+    if(mapping.positive !== null) cvec[mapping.positive] = coefficient;
+    if(mapping.negative !== null) cvec[mapping.negative] = -coefficient;
   });
   const bigM = 1000000;
   const objRow = {
@@ -218,7 +234,11 @@ function buildTableau(obj, constraints){
     objectiveCoeffs: {...obj.coeffs},
     originalVars,
     variableMap,
-    freeVariables,
+    variableDomains: Object.fromEntries(originalVars.map(variable => [
+      variable,
+      variableDomains[variable] || defaultDomain
+    ])),
+    freeVariables: originalVars.some(variable => (variableDomains[variable] || defaultDomain) === 'free'),
     objectiveVector: Object.fromEntries(vars.map((variable, index) => [variable, cvec[index]]))
   };
 }
@@ -276,6 +296,60 @@ function latexToAscii(s){ if(!s) return ''; let t=s; t=t.replace(/\\leq|\\le/g,'
 
 // UI: store constraints as LaTeX strings
 const constraintsLatex = []; // LaTeX strings
+const variableDomainsPL = Object.create(null);
+
+function updateVariableDomainControls(){
+  const container = $id('variable-domains-pl');
+  if(!container) return;
+  const objectiveField = $id('objective-field');
+  const objective = { vars: [] };
+  if(objectiveField && objectiveField.value.trim()){
+    try { objective.vars = parseObjective(latexToAscii(objectiveField.value)).vars; }
+    catch(error){ console.debug('La función objetivo aún está incompleta:', error.message); }
+  }
+  const constraints = [];
+  constraintsLatex.forEach(line => {
+    try { constraints.push(...parseConstraints(latexToAscii(line))); }
+    catch(error){ console.debug('La restricción aún está incompleta:', error.message); }
+  });
+  const variables = collectVars(objective, constraints);
+  container.replaceChildren();
+  if(!variables.length){
+    container.textContent = 'Escribe la función objetivo o añade restricciones para detectar las variables.';
+    return;
+  }
+  const options = [
+    ['nonnegative', '≥ 0 (no negativa)'],
+    ['nonpositive', '≤ 0 (no positiva)'],
+    ['zero', '= 0 (fija)'],
+    ['free', 'Irrestricta (libre)']
+  ];
+  variables.forEach(variable => {
+    const row = document.createElement('div');
+    row.className = 'variable-domain-row';
+    const label = document.createElement('label');
+    const select = document.createElement('select');
+    const id = `variable-domain-${variable}`;
+    label.htmlFor = id;
+    label.textContent = variable;
+    select.id = id;
+    select.setAttribute('aria-label', `Signo de ${variable}`);
+    options.forEach(([value, text]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = text;
+      select.appendChild(option);
+    });
+    select.value = variableDomainsPL[variable] || 'nonnegative';
+    variableDomainsPL[variable] = select.value;
+    select.addEventListener('change', () => {
+      variableDomainsPL[variable] = select.value;
+      if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs();
+    });
+    row.append(label, select);
+    container.appendChild(row);
+  });
+}
 
 // helper to create step cards in #steps
 function appendStepCard(html){ const container = $id('steps'); const card = document.createElement('div'); card.className='step-card'; card.innerHTML = html; container.appendChild(card); }
@@ -293,12 +367,14 @@ function computeSolutionFromTable(st){
   const originalVars = st.originalVars || st.vars;
   for(const variable of originalVars){
     const mapping = st.variableMap && st.variableMap[variable];
-    const columns = mapping ? [st.vars[mapping.positive], st.vars[mapping.negative]].filter(Boolean) : [variable];
-    const values = columns.map(column => {
-      const row = st.tableau.find(item => item.basic === column);
-      return row ? row.rhs : 0;
+    const positiveColumn = mapping && mapping.positive !== null ? st.vars[mapping.positive] : null;
+    const negativeColumn = mapping && mapping.negative !== null ? st.vars[mapping.negative] : null;
+    const positiveRow = positiveColumn && st.tableau.find(item => item.basic === positiveColumn);
+    const negativeRow = negativeColumn && st.tableau.find(item => item.basic === negativeColumn);
+    res.push({
+      var: variable,
+      value: (positiveRow ? positiveRow.rhs : 0) - (negativeRow ? negativeRow.rhs : 0)
     });
-    res.push({var: variable, value: values[0] - (values[1] || 0)});
   }
   const direction = st.objectiveDirection || 1;
   const infeasible = st.tableau.some(row => /^A\d+$/.test(row.basic) && Math.abs(row.rhs) > 1e-7);
@@ -308,8 +384,10 @@ function computeSolutionFromTable(st){
 // wire buttons to math-field inputs
 function initPLUI(){ const objField = $id('objective-field'); const consField = $id('constraint-field'); const addBtn = $id('btn-add-constraint'); const clearConsBtn = $id('btn-clear-constraints'); const calcBtn = $id('btn-calc-pl'); const clearAllBtn = $id('btn-clear-all'); const status = $id('status'); renderConstraintBracket(constraintsLatex);
 
-  addBtn.addEventListener('click', ()=>{ const raw = consField.value.trim(); if(!raw) return; constraintsLatex.push(raw); renderConstraintBracket(constraintsLatex); consField.value = ''; consField.focus(); if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs(); });
-  clearConsBtn.addEventListener('click', ()=>{ constraintsLatex.length = 0; renderConstraintBracket(constraintsLatex); $id('preflight').className='verification-box'; $id('preflight').textContent='Añade la función objetivo y las restricciones para comprobar el modelo.'; if(typeof simplexDesmos !== 'undefined' && simplexDesmos) simplexDesmos.setBlank(); });
+  objField.addEventListener('input', updateVariableDomainControls);
+  updateVariableDomainControls();
+  addBtn.addEventListener('click', ()=>{ const raw = consField.value.trim(); if(!raw) return; constraintsLatex.push(raw); renderConstraintBracket(constraintsLatex); updateVariableDomainControls(); consField.value = ''; consField.focus(); if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs(); });
+  clearConsBtn.addEventListener('click', ()=>{ constraintsLatex.length = 0; renderConstraintBracket(constraintsLatex); updateVariableDomainControls(); $id('preflight').className='verification-box'; $id('preflight').textContent='Añade la función objetivo y las restricciones para comprobar el modelo.'; if(typeof simplexDesmos !== 'undefined' && simplexDesmos) simplexDesmos.setBlank(); });
   calcBtn.addEventListener('click', ()=>{ // calculate simplex
     // clear previous output and show processing
     $id('steps').innerHTML = '';
@@ -317,7 +395,8 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
     status.textContent = 'Procesando...';
     try{
       const sense = document.querySelector('input[name="sense-pl"]:checked').value;
-      const variableDomain = document.querySelector('input[name="variable-domain-pl"]:checked').value;
+      updateVariableDomainControls();
+      const variableDomains = {...variableDomainsPL};
       const objLatex = objField.value.trim();
       console.log('Calcular Simplex triggered, objective:', objLatex, 'sense:', sense, 'constraints:', constraintsLatex);
       if(!objLatex) throw new Error('Ingrese la función objetivo.');
@@ -325,18 +404,19 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       const objAscii = latexToAscii(objLatex);
       console.log('Objective ASCII:', objAscii);
       const obj = parseObjective((sense? sense+': ':'') + objAscii);
-      obj.variableDomain = variableDomain;
+      obj.variableDomains = variableDomains;
       const consAsciiLines = consL.map(l=> latexToAscii(l));
       console.log('Constraints ASCII lines:', consAsciiLines);
       const parsedConstraints = parseConstraints(consAsciiLines.join('\n'));
       // x ≥ 0, y ≥ 0, ... ya son condiciones propias del simplex estándar;
       // no se agregan como filas artificiales de tipo ≥ al tableau.
-      const implicitNonNegative = variableDomain === 'nonnegative'
-        ? parsedConstraints.filter(constraint => typeof isImplicitNonNegativity === 'function' && isImplicitNonNegativity(constraint))
-        : [];
-      const cons = variableDomain === 'nonnegative'
-        ? parsedConstraints.filter(constraint => !(typeof isImplicitNonNegativity === 'function' && isImplicitNonNegativity(constraint)))
-        : parsedConstraints;
+      const implicitNonNegative = parsedConstraints.filter(constraint =>
+        typeof isImplicitNonNegativity === 'function' &&
+        isImplicitNonNegativity(constraint) &&
+        variableDomains[Object.keys(constraint.coeffs).find(variable => Math.abs(constraint.coeffs[variable]) > 1e-12)] === 'nonnegative'
+      );
+      const implicitConstraints = new Set(implicitNonNegative);
+      const cons = parsedConstraints.filter(constraint => !implicitConstraints.has(constraint));
       console.log('Parsed constraints:', cons);
       const method = $id('method-pl') ? $id('method-pl').value : 'big-m';
       const preflight = validateSimplexModel(obj, cons, sense, method);
@@ -351,7 +431,7 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       if(steps[steps.length - 1].type === 'unbounded') {
         renderUnboundedVerification();
       } else {
-        const solution = computeSolutionFromTable({...lastState, variableDomain});
+        const solution = computeSolutionFromTable({...lastState, variableDomains});
         if(solution.infeasible) renderInfeasibleVerification();
         else renderResultVerification(solution, obj, cons);
       }
@@ -367,7 +447,7 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       status.textContent = 'Error: '+e.message + ' (ver consola para más detalles)';
     }
   });
-  clearAllBtn.addEventListener('click', ()=>{ objField.value=''; consField.value=''; constraintsLatex.length=0; renderConstraintBracket(constraintsLatex); $id('preflight').textContent='Añade la función objetivo y las restricciones para comprobar el modelo.'; $id('verification').textContent='Aquí se verificará la solución al finalizar el método.'; $id('steps').innerHTML=''; if(typeof simplexDesmos !== 'undefined' && simplexDesmos) simplexDesmos.setBlank(); status.innerText=''; }); }
+  clearAllBtn.addEventListener('click', ()=>{ objField.value=''; consField.value=''; constraintsLatex.length=0; renderConstraintBracket(constraintsLatex); updateVariableDomainControls(); $id('preflight').textContent='Añade la función objetivo y las restricciones para comprobar el modelo.'; $id('verification').textContent='Aquí se verificará la solución al finalizar el método.'; $id('steps').innerHTML=''; if(typeof simplexDesmos !== 'undefined' && simplexDesmos) simplexDesmos.setBlank(); status.innerText=''; }); }
 
 // small plot function (2 vars support)
 function plot2vars(obj, constraints){ const plotDiv=$id('plot'); plotDiv.innerHTML=''; if(!obj.vars || obj.vars.length!==2){ plotDiv.innerText='La gráfica solo está disponible para 2 variables.'; return; } const vx=obj.vars[0], vy=obj.vars[1]; const xRange=[0, Math.max(10, ...constraints.map(c=>c.rhs))]; const yRange=[0, Math.max(10, ...constraints.map(c=>c.rhs))]; const pts=[]; const step=(Math.max(xRange[1], yRange[1]))/200; for(let xv=0;xv<=xRange[1]; xv+=step){ for(let yv=0; yv<=yRange[1]; yv+=step){ let ok=true; for(const c of constraints){ const val=(c.coeffs[vx]||0)*xv + (c.coeffs[vy]||0)*yv; if(c.op==='<'+'=' && val>c.rhs+1e-6){ ok=false; break; } if(c.op==='>=' && val<c.rhs-1e-6){ ok=false; break; } if(c.op==='=' && Math.abs(val-c.rhs)>1e-6){ ok=false; break; } } if(ok) pts.push([xv,yv]); } }

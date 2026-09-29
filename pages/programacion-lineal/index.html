@@ -6,7 +6,7 @@
     <title>GeoMath | Programación Lineal</title>
     <link rel="stylesheet" href="../../assets/css/global.css">
     <link rel="stylesheet" href="../../assets/css/matrices.css">
-    <link rel="stylesheet" href="../../assets/css/programacion-lineal.css?v=20260813-1">
+    <link rel="stylesheet" href="../../assets/css/programacion-lineal.css?v=20260929-1">
     <link rel="icon" type="image/png" href="../../assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -68,11 +68,10 @@
                             <option value="two-phase">Dos Fases</option>
                         </select>
                     </div>
-                    <div class="config-item">
-                        <label>Signo de variables</label>
-                        <div>
-                            <label><input type="radio" name="variable-domain-pl" value="nonnegative" checked> x, y ≥ 0</label>
-                            <label><input type="radio" name="variable-domain-pl" value="free"> Variables libres (positivas o negativas)</label>
+                    <div class="config-item variable-domains-item">
+                        <label>Signo de cada variable</label>
+                        <div id="variable-domains-pl" class="variable-domains">
+                            Escribe la función objetivo o añade restricciones para detectar las variables.
                         </div>
                     </div>
                 </div>
@@ -145,8 +144,8 @@
     </aside>
 </main>
 
-<script src="../../assets/js/programacion-lineal/render.js?v=20260906-2"></script>
-<script src="../../assets/js/programacion-lineal/patch.js?v=20260906-6"></script>
+<script src="../../assets/js/programacion-lineal/render.js?v=20260929-1"></script>
+<script src="../../assets/js/programacion-lineal/patch.js?v=20260929-1"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{
