@@ -45,6 +45,13 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 .verification-box.warning{ background:#fff7ed; border-left:4px solid #f59e0b; }
 .simplex-unbounded{ background:#fff7ed !important; border-left:4px solid #f59e0b; }
 .phase-heading{ background:#fefce8; border-left:4px solid #ca8a04; padding:10px; border-radius:6px; }
+.graphical-method{ background:#eff6ff !important; border-left:4px solid #2563eb; }
+.graphical-procedure{ border-left:4px solid #64748b; }
+.graphical-coordinate-step{ border-top:1px solid #d1d5db; padding:10px 4px; }
+.graphical-coordinate-step h4{ margin:4px 0 8px; }
+.graphical-vertices{ width:100%; border-collapse:collapse; }
+.graphical-vertices th, .graphical-vertices td{ border:1px solid #d1d5db; padding:8px 10px; text-align:center; }
+.graphical-optimum{ background:#dcfce7; font-weight:700; }
 .phase-card{ border-left:4px solid #7c3aed; }
 .free-variable-step{ background:#f5f3ff !important; border-left:4px solid #7c3aed; min-width:0; max-width:100%; box-sizing:border-box; }
 .free-variable-step h4{ margin-bottom:6px; }

@@ -229,15 +229,19 @@ function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
   });
   const variables = collectVars(obj, constraints);
   if(!variables.length) issues.push('La función objetivo no contiene variables.');
-  const direction = sense === 'min' ? -1 : 1;
-  variables.forEach(variable => {
-    const improves = rationalCompare(rationalMultiply(direction, obj.coeffs[variable] || 0), 0) > 0;
-    const limitsVariable = constraints.some(constraint => rationalCompare(constraint.coeffs[variable] || 0, 0) > 0);
-    if(improves && !limitsVariable) notes.push(`${variable} puede mejorar Z sin un límite superior aparente; el simplex lo comprobará mostrando sus iteraciones.`);
-  });
+  if(method !== 'graphical'){
+    const direction = sense === 'min' ? -1 : 1;
+    variables.forEach(variable => {
+      const improves = rationalCompare(rationalMultiply(direction, obj.coeffs[variable] || 0), 0) > 0;
+      const limitsVariable = constraints.some(constraint => rationalCompare(constraint.coeffs[variable] || 0, 0) > 0);
+      if(improves && !limitsVariable) notes.push(`${variable} puede mejorar Z sin un límite superior aparente; el simplex lo comprobará mostrando sus iteraciones.`);
+    });
+  }
   if(!issues.length){
     if(method === 'simplex'){
       notes.push('Se aplicará Símplex estándar: las restricciones proporcionan una base inicial de holguras y no se necesitan variables artificiales.');
+    } else if(method === 'graphical'){
+      notes.push('Se aplicará el método gráfico: se consideran los signos seleccionados, se intersectan las fronteras y se evalúa Z en cada vértice factible.');
     } else {
       notes.push(method === 'two-phase'
         ? 'Se aplicará Dos Fases: la Fase I encuentra una solución básica factible y la Fase II optimiza la función original.'
@@ -254,12 +258,397 @@ function isImplicitNonNegativity(constraint){
   return terms.length === 1 && rationalCompare(terms[0][1], 1) === 0;
 }
 
+function graphicalPointKey(point){
+  return `${formatNum(point.x)}|${formatNum(point.y)}`;
+}
+
+function graphicalPointIsFeasible(point, variables, constraints, variableDomains){
+  const [x, y] = variables;
+  const coordinates = { [x]: point.x, [y]: point.y };
+  if(!variables.every(variable => {
+    const domain = variableDomains[variable] || 'nonnegative';
+    const comparison = rationalCompare(coordinates[variable], 0);
+    if(domain === 'nonnegative') return comparison >= 0;
+    if(domain === 'nonpositive') return comparison <= 0;
+    if(domain === 'zero') return comparison === 0;
+    return true;
+  })) return false;
+  return constraints.every(constraint => {
+    const lhs = rationalAdd(
+      rationalMultiply(constraint.coeffs[x] || rational(0), point.x),
+      rationalMultiply(constraint.coeffs[y] || rational(0), point.y)
+    );
+    const comparison = rationalCompare(lhs, constraint.rhs);
+    if(constraint.op === '<=') return comparison <= 0;
+    if(constraint.op === '>=') return comparison >= 0;
+    return comparison === 0;
+  });
+}
+
+function graphicalBoundaryIntersection(left, right){
+  const determinant = rationalSubtract(
+    rationalMultiply(left.a, right.b),
+    rationalMultiply(right.a, left.b)
+  );
+  if(rationalIsZero(determinant)) return null;
+  const determinantX = rationalSubtract(
+    rationalMultiply(left.rhs, right.b),
+    rationalMultiply(right.rhs, left.b)
+  );
+  const determinantY = rationalSubtract(
+    rationalMultiply(left.a, right.rhs),
+    rationalMultiply(right.a, left.rhs)
+  );
+  return {
+    x: rationalDivide(determinantX, determinant),
+    y: rationalDivide(determinantY, determinant),
+    determinant,
+    determinantX,
+    determinantY
+  };
+}
+
+function graphicalBoundaryExpression(boundary, variables){
+  const terms = [
+    desmosTerm(boundary.a, variables[0]),
+    desmosTerm(boundary.b, variables[1])
+  ].filter(Boolean);
+  const lhs = terms.join('+').replace(/\+\-/g, '-');
+  return `${lhs || '0'}=${formatNum(boundary.rhs)}`;
+}
+
+function renderGraphicalIntersectionProcedure(result){
+  const section = document.createElement('article');
+  section.className = 'step-card graphical-procedure';
+  section.innerHTML = '<h3>Procedimiento para calcular las coordenadas</h3><p>Cada vértice se obtiene al resolver el sistema formado por dos fronteras. Se usa la regla de Cramer para calcular primero los determinantes y luego las coordenadas exactas.</p>';
+  if(!result.intersections.length){
+    section.insertAdjacentHTML('beforeend', '<p>No se encontraron intersecciones entre las fronteras consideradas.</p>');
+    return section;
+  }
+
+  result.intersections.forEach((point, index) => {
+    const {left, right} = point.boundaries;
+    const [x, y] = result.variables;
+    const card = document.createElement('section');
+    card.className = 'graphical-coordinate-step';
+    card.innerHTML = `<h4>Intersección \\(V_{${index + 1}}\\): ${left.label} con ${right.label}</h4>
+      <p>Sistema de fronteras:</p>
+      <div>\\(${graphicalBoundaryExpression(left, result.variables)}\\)</div>
+      <div>\\(${graphicalBoundaryExpression(right, result.variables)}\\)</div>
+      <p>Determinante principal:</p>
+      <div>\\(\\Delta = a_1b_2-a_2b_1 = (${formatNum(left.a)})(${formatNum(right.b)})-(${formatNum(right.a)})(${formatNum(left.b)}) = ${formatNum(point.determinant)}\\)</div>
+      <p>Cálculo de \\(${x}\\):</p>
+      <div>\\(\\Delta_${x} = c_1b_2-c_2b_1 = (${formatNum(left.rhs)})(${formatNum(right.b)})-(${formatNum(right.rhs)})(${formatNum(left.b)}) = ${formatNum(point.determinantX)}\\)</div>
+      <div>\\(${x}=\\frac{\\Delta_${x}}{\\Delta}=\\frac{${formatNum(point.determinantX)}}{${formatNum(point.determinant)}}=${formatNum(point.x)}\\)</div>
+      <p>Cálculo de \\(${y}\\):</p>
+      <div>\\(\\Delta_${y} = a_1c_2-a_2c_1 = (${formatNum(left.a)})(${formatNum(right.rhs)})-(${formatNum(right.a)})(${formatNum(left.rhs)}) = ${formatNum(point.determinantY)}\\)</div>
+      <div>\\(${y}=\\frac{\\Delta_${y}}{\\Delta}=\\frac{${formatNum(point.determinantY)}}{${formatNum(point.determinant)}}=${formatNum(point.y)}\\)</div>
+      <p>Por tanto, \\(V_{${index + 1}}=(${formatNum(point.x)},${formatNum(point.y)})\\). ${point.feasible ? 'El punto cumple las restricciones y los dominios seleccionados.' : 'El punto no cumple todas las restricciones o dominios, por lo que no pertenece a la región factible.'}</p>`;
+    section.appendChild(card);
+  });
+  return section;
+}
+
+function graphicalObjectiveValue(point, obj, variables){
+  return rationalAdd(
+    rationalMultiply(obj.coeffs[variables[0]] || rational(0), point.x),
+    rationalMultiply(obj.coeffs[variables[1]] || rational(0), point.y)
+  );
+}
+
+function recessionDirectionIsFeasible(direction, variables, constraints, variableDomains){
+  const [x, y] = variables;
+  const coordinates = { [x]: direction.x, [y]: direction.y };
+  if(!variables.every(variable => {
+    const domain = variableDomains[variable] || 'nonnegative';
+    const comparison = rationalCompare(coordinates[variable], 0);
+    if(domain === 'nonnegative') return comparison >= 0;
+    if(domain === 'nonpositive') return comparison <= 0;
+    if(domain === 'zero') return comparison === 0;
+    return true;
+  })) return false;
+  return constraints.every(constraint => {
+    const change = rationalAdd(
+      rationalMultiply(constraint.coeffs[x] || rational(0), direction.x),
+      rationalMultiply(constraint.coeffs[y] || rational(0), direction.y)
+    );
+    const comparison = rationalCompare(change, 0);
+    if(constraint.op === '<=') return comparison <= 0;
+    if(constraint.op === '>=') return comparison >= 0;
+    return comparison === 0;
+  });
+}
+
+function graphicalImprovingDirectionExists(obj, variables, constraints){
+  const domains = obj.variableDomains || {};
+  const directions = [];
+  variables.forEach((variable, index) => {
+    const otherIndex = 1 - index;
+    const domain = domains[variable] || 'nonnegative';
+    if(domain === 'zero') return;
+    const direction = {x: rational(0), y: rational(0)};
+    direction[index === 0 ? 'x' : 'y'] = domain === 'nonpositive' ? rational(-1) : rational(1);
+    directions.push(direction);
+    if(domain === 'free'){
+      const opposite = {...direction};
+      opposite[index === 0 ? 'x' : 'y'] = rational(-1);
+      directions.push(opposite);
+    }
+    directions.push({x: direction.x, y: rational(0)});
+    directions.push({x: rational(0), y: direction.y});
+    if(otherIndex >= 0 && domains[variables[otherIndex]] === 'free'){
+      directions.push({...direction, [otherIndex === 0 ? 'x' : 'y']: rational(1)});
+      directions.push({...direction, [otherIndex === 0 ? 'x' : 'y']: rational(-1)});
+    }
+  });
+  constraints.forEach(constraint => {
+    const a = constraint.coeffs[variables[0]] || rational(0);
+    const b = constraint.coeffs[variables[1]] || rational(0);
+    if(rationalIsZero(a) && rationalIsZero(b)) return;
+    directions.push(
+      {x: b, y: rationalNegate(a)},
+      {x: rationalNegate(b), y: a}
+    );
+  });
+
+  const directionOfObjective = obj.sense === 'min' ? -1 : 1;
+  return directions.some(direction => {
+    if(rationalIsZero(direction.x) && rationalIsZero(direction.y)) return false;
+    if(!recessionDirectionIsFeasible(direction, variables, constraints, domains)) return false;
+    const change = graphicalObjectiveValue(direction, obj, variables);
+    return rationalCompare(rationalMultiply(directionOfObjective, change), 0) > 0;
+  });
+}
+
+function solveGraphicalModel(obj, constraints){
+  const variables = obj.vars;
+  const variableDomains = obj.variableDomains || {};
+  const boundaries = [
+    ...constraints.map((constraint, index) => ({
+      a: constraint.coeffs[variables[0]] || rational(0),
+      b: constraint.coeffs[variables[1]] || rational(0),
+      rhs: constraint.rhs,
+      label: `restricción ${index + 1}`
+    }))
+  ];
+  variables.forEach((variable, index) => {
+    if((variableDomains[variable] || 'nonnegative') === 'free') return;
+    boundaries.push({
+      a: index === 0 ? rational(1) : rational(0),
+      b: index === 1 ? rational(1) : rational(0),
+      rhs: rational(0),
+      label: `dominio de ${variable}`
+    });
+  });
+  const intersections = new Map();
+  for(let left = 0; left < boundaries.length; left++){
+    for(let right = left + 1; right < boundaries.length; right++){
+      const point = graphicalBoundaryIntersection(boundaries[left], boundaries[right]);
+      if(point) intersections.set(graphicalPointKey(point), {
+        ...point,
+        boundaries: {left: boundaries[left], right: boundaries[right]}
+      });
+    }
+  }
+  const points = Array.from(intersections.values())
+    .sort((left, right) => rationalCompare(left.x, right.x) || rationalCompare(left.y, right.y))
+    .map(point => ({
+      ...point,
+      feasible: graphicalPointIsFeasible(point, variables, constraints, variableDomains),
+      objective: graphicalObjectiveValue(point, obj, variables)
+    }));
+  const feasibleVertices = points.filter(point => point.feasible);
+  let optimum = null;
+  const direction = obj.sense === 'min' ? -1 : 1;
+  feasibleVertices.forEach(point => {
+    const improves = optimum === null
+      ? true
+      : rationalCompare(rationalMultiply(direction, point.objective), rationalMultiply(direction, optimum.objective)) > 0;
+    if(improves) optimum = point;
+  });
+  const unbounded = feasibleVertices.length > 0 && graphicalImprovingDirectionExists(obj, variables, constraints);
+  const optimalVertices = optimum && !unbounded
+    ? feasibleVertices.filter(point => rationalCompare(point.objective, optimum.objective) === 0)
+    : [];
+  return {
+    variables,
+    intersections: points,
+    feasibleVertices,
+    optimum: unbounded ? null : optimum,
+    optimalVertices,
+    unbounded
+  };
+}
+
+function renderGraphicalResult(result, obj){
+  const container = $id('steps');
+  container.replaceChildren();
+  const domainLabels = {
+    nonnegative: '\\ge 0',
+    nonpositive: '\\le 0',
+    zero: '= 0',
+    free: '\\in\\mathbb{R}'
+  };
+  const domainDescription = result.variables
+    .map(variable => `\\(${variable} ${domainLabels[obj.variableDomains?.[variable] || 'nonnegative']}\\)`)
+    .join(', ');
+  const overview = document.createElement('article');
+  overview.className = 'step-card graphical-method';
+  overview.innerHTML = `<h3>Método gráfico: intersecciones y vértices</h3>
+    <p><strong>Dominios:</strong> ${domainDescription}.</p>
+    <p>Se consideran las fronteras de las restricciones y las fronteras de los dominios seleccionados. Se calculan sus intersecciones, se conservan los puntos que cumplen todas las restricciones y dominios, y se evalúa la función objetivo en cada vértice factible.</p>`;
+  container.appendChild(overview);
+
+  if(!result.feasibleVertices.length){
+    overview.insertAdjacentHTML('beforeend', '<p><strong>No se encontró ningún vértice factible para los dominios y restricciones seleccionados.</strong></p>');
+  }
+
+  container.appendChild(renderGraphicalIntersectionProcedure(result));
+
+  const note = document.createElement('p');
+  note.innerHTML = `<strong>Función objetivo:</strong> ${obj.sense === 'min' ? 'Minimizar' : 'Maximizar'} \\(Z\\). Se evaluó en los ${result.feasibleVertices.length} vértices factibles.`;
+  container.appendChild(note);
+  if(result.unbounded){
+    const warning = document.createElement('p');
+    warning.className = 'verification-box warning';
+    warning.textContent = 'La función objetivo puede mejorar indefinidamente dentro de la región factible; no existe un óptimo finito.';
+    container.appendChild(warning);
+  } else if(result.optimalVertices.length > 1){
+    const multiple = document.createElement('p');
+    multiple.textContent = 'Hay óptimos alternativos: la función objetivo alcanza el mismo valor en más de un vértice factible.';
+    container.appendChild(multiple);
+  }
+
+  const table = document.createElement('table');
+  table.className = 'simplex-table graphical-vertices';
+  table.innerHTML = `<thead><tr><th>Intersección</th><th>${result.variables[0]}</th><th>${result.variables[1]}</th><th>Z</th><th>Estado</th></tr></thead>`;
+  const body = document.createElement('tbody');
+  if(!result.intersections.length){
+    body.innerHTML = '<tr><td colspan="5">No se generaron intersecciones.</td></tr>';
+  } else {
+    result.intersections.forEach((point, index) => {
+      const row = document.createElement('tr');
+      if(point.feasible && result.optimalVertices.includes(point)) row.className = 'graphical-optimum';
+      row.innerHTML = `<td>\\(V_{${index + 1}}\\)</td><td>\\(${formatNum(point.x)}\\)</td><td>\\(${formatNum(point.y)}\\)</td><td>${point.feasible ? `\\(${formatNum(point.objective)}\\)` : '—'}</td><td>${point.feasible ? result.optimalVertices.includes(point) ? 'Óptimo' : 'Factible' : 'No factible'}</td>`;
+      body.appendChild(row);
+    });
+  }
+  table.appendChild(body);
+  container.appendChild(table);
+  typesetMath([container]);
+}
+
+function renderGraphicalVerification(result, obj){
+  const target = $id('verification');
+  if(!target) return;
+  if(!result.feasibleVertices.length){
+    target.className = 'verification-box error';
+    target.textContent = 'No se encontró ningún vértice factible para los signos y restricciones seleccionados.';
+  } else if(result.unbounded){
+    target.className = 'verification-box warning';
+    target.textContent = 'La región factible permite mejorar la función objetivo indefinidamente; no existe solución óptima finita.';
+  } else {
+    const optimum = result.optimum;
+    const variableValues = result.variables.map((variable, index) => {
+      const value = index === 0 ? optimum.x : optimum.y;
+      const domain = obj.variableDomains?.[variable] || 'nonnegative';
+      const domainSymbol = {nonnegative: '\\ge 0', nonpositive: '\\le 0', zero: '= 0', free: '\\in\\mathbb{R}'}[domain];
+      const meetsDomain = domain === 'nonnegative'
+        ? rationalCompare(value, 0) >= 0
+        : domain === 'nonpositive' ? rationalCompare(value, 0) <= 0
+          : domain === 'zero' ? rationalIsZero(value) : true;
+      return `\\(${variable} = ${formatNum(value)}\\;(${formatDecimal(value)}),\\quad ${domainSymbol}\\) — ${meetsDomain ? 'cumple' : 'no cumple'}`;
+    }).join(', ');
+    target.className = 'verification-box ok';
+    target.innerHTML = `<strong>Solución óptima por método gráfico.</strong><p>${variableValues}</p><p>\\(Z = ${formatNum(optimum.objective)}\\;(${formatDecimal(optimum.objective)})\\)</p>`;
+  }
+  typesetMath([target]);
+}
+
+function plotGraphicalModel(obj, constraints, result){
+  const graph = initSimplexDesmos();
+  const plot = $id('plot');
+  if(!graph){
+    if(plot) plot.textContent = 'No se pudo cargar Desmos para dibujar la región factible.';
+    return;
+  }
+  const [x, y] = result.variables;
+  const axis = Math.max(10, ...result.intersections.map(point => Math.max(Math.abs(Number(point.x)), Math.abs(Number(point.y)))));
+  const bound = Math.ceil(axis * 1.25);
+  const domain = variable => obj.variableDomains?.[variable] || 'nonnegative';
+  const lowerBound = variable => ['nonpositive', 'free'].includes(domain(variable)) ? -bound : -1;
+  const upperBound = variable => domain(variable) === 'nonpositive' || domain(variable) === 'zero' ? 1 : bound;
+  graph.setBlank();
+  graph.setMathBounds({
+    left: lowerBound(x),
+    right: upperBound(x),
+    bottom: lowerBound(y),
+    top: upperBound(y)
+  });
+  [x, y].forEach(variable => {
+    const restriction = {
+      nonnegative: `${variable}\\ge0`,
+      nonpositive: `${variable}\\le0`,
+      zero: `${variable}=0`
+    }[domain(variable)];
+    if(restriction) graph.setExpression({
+      id: `graphical-domain-${variable}`,
+      latex: restriction,
+      color: '#64748b',
+      fillOpacity: domain(variable) === 'zero' ? 0 : 0.03
+    });
+  });
+  constraints.forEach((constraint, index) => {
+    const a = constraint.coeffs[x] || rational(0);
+    const b = constraint.coeffs[y] || rational(0);
+    if(rationalIsZero(a) && rationalIsZero(b)) return;
+    const left = desmosTerm(a, x);
+    const right = desmosTerm(b, y);
+    const expression = [left, right].filter(Boolean).join('+').replace(/\+\-/g, '-');
+    const operator = constraint.op === '<=' ? '\\le' : constraint.op === '>=' ? '\\ge' : '=';
+    graph.setExpression({
+      id: `graphical-constraint-${index}`,
+      latex: `${expression}${operator}${formatNum(constraint.rhs)}`,
+      color: '#2563eb',
+      fillOpacity: constraint.op === '=' ? 0 : 0.08,
+      lineOpacity: 0.9
+    });
+  });
+  const objective = [obj.coeffs[x] || rational(0), obj.coeffs[y] || rational(0)];
+  const objectiveExpression = objective.map((coefficient, index) => desmosTerm(coefficient, result.variables[index]))
+    .filter(Boolean).join('+').replace(/\+\-/g, '-');
+  if(result.optimum && !result.unbounded){
+    graph.setExpression({
+      id: 'graphical-objective',
+      latex: `${objectiveExpression}=${formatNum(result.optimum.objective)}`,
+      color: '#dc2626',
+      lineWidth: 3,
+      showLabel: true,
+      label: 'Óptimo'
+    });
+  }
+  result.feasibleVertices.forEach((point, index) => {
+    const optimal = result.optimalVertices.includes(point);
+    graph.setExpression({
+      id: `graphical-vertex-${index}`,
+      latex: `(${formatNum(point.x)},${formatNum(point.y)})`,
+      color: optimal ? '#16a34a' : '#7c3aed',
+      showLabel: true,
+      label: optimal ? `Óptimo V${index + 1}` : `V${index + 1}`,
+      labelSize: Desmos.LabelSizes.MEDIUM
+    });
+  });
+}
+
 function renderPreflightReport(report){
   const target = $id('preflight');
   if(!target) return;
   target.className = `verification-box ${report.ok ? 'ok' : 'error'}`;
   const messages = report.ok ? report.notes : report.issues;
-  target.innerHTML = `<strong>${report.ok ? 'Modelo listo para iterar.' : 'El modelo necesita corrección.'}</strong><ul>${messages.map(message => `<li>${message}</li>`).join('')}</ul>`;
+  const readyMessage = report.notes.some(note => note.startsWith('Se aplicará el método gráfico'))
+    ? 'Modelo listo para el método gráfico.'
+    : 'Modelo listo para iterar.';
+  target.innerHTML = `<strong>${report.ok ? readyMessage : 'El modelo necesita corrección.'}</strong><ul>${messages.map(message => `<li>${message}</li>`).join('')}</ul>`;
 }
 
 function renderResultVerification(solution, obj, constraints){
@@ -432,7 +821,7 @@ function renderFreeVariableTransformation(container, state, obj, constraints){
       <p><strong>${objectiveSense}:</strong> \\(Z = ${objective}\\)</p>
       <ul>${transformedConstraints}</ul>
     </div>
-    <p>Las variables \\(x_i^+\\) y \\(x_i^-\\) quedan como columnas independientes; las columnas de holgura, exceso y artificial se agregan según cada restricción antes de iniciar las iteraciones.</p>`;
+    <p>Las variables transformadas quedan como columnas independientes no negativas; las columnas de holgura, exceso y artificial se agregan según cada restricción antes de iniciar las iteraciones.</p>`;
   container.appendChild(card);
 }
 
@@ -468,13 +857,12 @@ function tableToLatexWithHighlight(state, highlight){
   const slackIndexes = orderedSlackIndexes(state);
   const phaseOne = state.method === 'two-phase' && state.phase === 1;
   const objectiveScale = phaseOne || state.objectiveSense === 'min' ? -1 : 1;
-  const objectiveName = phaseOne ? '\\rho' : 'Z';
+  const objectiveName = phaseOne ? 'r' : 'Z';
   const columns = 'c' + 'r'.repeat(state.vars.length + slackIndexes.length + 2);
   const headers = ['\\text{Variables básicas}', objectiveName, ...state.vars.map(simplexNameToLatex), ...slackIndexes.map(index => simplexNameToLatex(state.slackNames[index])), '\\text{Solución}'];
   let latex = `\\[\\begin{array}{${columns}} ${headers.join(' & ')} \\\\ \\hline `;
 
-  state.tableau.forEach((row, rowIndex) => {
-    const values = [simplexNameToLatex(row.basic), 0, ...row.coeffs, ...orderedSlackValues(row.slack, slackIndexes), row.rhs].map((value, columnIndex) => {
+  const formatValues = (values, rowIndex) => values.map((value, columnIndex) => {
       const formatted = typeof value === 'number' || value instanceof Rational ? formatTableauNumber(value, state) : value;
       const pivotColumn = highlight
         ? displayTableauColumnIndex(state, highlight.enteringIndex, slackIndexes)
@@ -482,8 +870,6 @@ function tableToLatexWithHighlight(state, highlight){
       return highlight && rowIndex === highlight.leavingRowIdx && columnIndex === pivotColumn
         ? `\\class{pivot-cell}{${formatted}}` : formatted;
     });
-    latex += `${values.join(' & ')} \\\\ `;
-  });
   const objectiveValues = [
     objectiveName,
     1,
@@ -491,7 +877,12 @@ function tableToLatexWithHighlight(state, highlight){
     ...orderedSlackValues(state.objRow.slack, slackIndexes).map(value => rationalMultiply(value, objectiveScale)),
     rationalMultiply(state.objRow.rhs, objectiveScale)
   ];
-  latex += `\\hline ${objectiveValues.map(value => typeof value === 'number' || value instanceof Rational ? formatTableauNumber(value, state) : value).join(' & ')} \\\\ \\end{array}\\]`;
+  latex += `${formatValues(objectiveValues, -1).join(' & ')} \\\\ \\hline `;
+  state.tableau.forEach((row, rowIndex) => {
+    const values = [simplexNameToLatex(row.basic), 0, ...row.coeffs, ...orderedSlackValues(row.slack, slackIndexes), row.rhs];
+    latex += `${formatValues(values, rowIndex).join(' & ')} \\\\ `;
+  });
+  latex += `\\end{array}\\]`;
   return latex;
 }
 
@@ -510,7 +901,7 @@ function renderObjectivePreparation(container, preparation, state, heading = 'Pr
     section.appendChild(note);
   } else {
     const objectiveScale = state.method === 'two-phase' && state.phase === 1 || state.objectiveSense === 'min' ? -1 : 1;
-    const objectiveName = state.method === 'two-phase' && state.phase === 1 ? '\\rho' : 'Z';
+    const objectiveName = state.method === 'two-phase' && state.phase === 1 ? 'r' : 'Z';
     preparation.operations.forEach(operation => {
       const displayFactor = rationalMultiply(operation.factor, objectiveScale);
       const rowOperation = document.createElement('p');
@@ -634,8 +1025,9 @@ function initSimplexDesmos(){
 }
 
 function desmosTerm(coefficient, variable){
-  if(coefficient === 1) return variable;
-  if(coefficient === -1) return `-${variable}`;
+  if(rationalIsZero(coefficient)) return '';
+  if(rationalCompare(coefficient, 1) === 0) return variable;
+  if(rationalCompare(coefficient, -1) === 0) return `-${variable}`;
   return `${formatNum(coefficient)}${variable}`;
 }
 

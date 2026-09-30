@@ -6,7 +6,7 @@
     <title>GeoMath | Programación Lineal</title>
     <link rel="stylesheet" href="../../assets/css/global.css">
     <link rel="stylesheet" href="../../assets/css/matrices.css">
-    <link rel="stylesheet" href="../../assets/css/programacion-lineal.css?v=20260930-2">
+    <link rel="stylesheet" href="../../assets/css/programacion-lineal.css?v=20260930-3">
     <link rel="icon" type="image/png" href="../../assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -44,7 +44,7 @@
     </div>
     <div class="hero-text">
         <h2>Programación Lineal</h2>
-        <p>Métodos Simplex, Gran M y Dos Fases paso a paso con entrada LaTeX.</p>
+        <p>Métodos Símplex, Gran M, Dos Fases y método gráfico con entrada LaTeX.</p>
     </div>
 </header>
 
@@ -67,6 +67,7 @@
                             <option value="simplex" selected>Símplex estándar</option>
                             <option value="big-m">Gran M</option>
                             <option value="two-phase">Dos Fases</option>
+                            <option value="graphical">Método gráfico (2 variables)</option>
                         </select>
                     </div>
                     <div class="config-item variable-domains-item">
@@ -105,7 +106,7 @@
 
             <div class="card">
                 <div class="acciones-container">
-                    <button id="btn-calc-pl">Calcular Simplex</button>
+                    <button id="btn-calc-pl">Calcular Símplex</button>
                     <button id="btn-clear-all">Limpiar todo</button>
                 </div>
             </div>
@@ -116,7 +117,7 @@
             </div>
 
             <div class="card simplex-steps-card">
-                <h2>Pasos del Simplex</h2>
+                <h2>Resultados y pasos del método</h2>
                 <div id="steps"></div>
             </div>
 
@@ -146,8 +147,8 @@
     </aside>
 </main>
 
-<script src="../../assets/js/programacion-lineal/render.js?v=20260930-5"></script>
-<script src="../../assets/js/programacion-lineal/patch.js?v=20260930-5"></script>
+<script src="../../assets/js/programacion-lineal/render.js?v=20260930-10"></script>
+<script src="../../assets/js/programacion-lineal/patch.js?v=20260930-10"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{

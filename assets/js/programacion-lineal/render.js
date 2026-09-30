@@ -212,6 +212,9 @@ function buildTableau(obj, constraints){
   const variableDomains = obj.variableDomains || {};
   const defaultDomain = obj.variableDomain === 'free' ? 'free' : 'nonnegative';
   const vars = [];
+  const freeVariableNames = ['m', 'n', 'p', 'q'];
+  const reservedNames = new Set(originalVars);
+  let freeVariableIndex = 0;
   const variableMap = Object.fromEntries(originalVars.map(variable => {
     const domain = variableDomains[variable] || defaultDomain;
     if(domain === 'zero') return [variable, { positive: null, negative: null }];
@@ -223,7 +226,14 @@ function buildTableau(obj, constraints){
     if(domain === 'free'){
       const positive = vars.length;
       const negative = positive + 1;
-      vars.push(`${variable}+`, `${variable}-`);
+      const preferredNames = freeVariableNames.slice(freeVariableIndex * 2, freeVariableIndex * 2 + 2);
+      const hasAvailableNames = preferredNames.length === 2 &&
+        preferredNames.every(name => !reservedNames.has(name) && !vars.includes(name));
+      const [positiveName, negativeName] = hasAvailableNames
+        ? preferredNames
+        : [`${variable}+`, `${variable}-`];
+      freeVariableIndex++;
+      vars.push(positiveName, negativeName);
       return [variable, { positive, negative }];
     }
     const positive = vars.length;
@@ -413,7 +423,21 @@ function formatDecimal(value){
   if(Math.abs(decimal) < 1e-9) return '0';
   return String(Number(decimal.toFixed(8)));
 }
-function tableToLatex(st){ const nvars=st.vars.length, mslack=st.slackNames.length; const cols = ['c'].concat(Array(nvars).fill('r')).concat(Array(mslack).fill('r')).concat(['r']); const colSpec=cols.join(''); let s='\\[\\begin{array}{'+colSpec+'}'; const headers=['\\mathrm{BV}'].concat(st.vars.map(v=>`$${v}$`)).concat(st.slackNames.map(sn=>`$${sn}$`)).concat(['$\\mathrm{RHS}$']); s+=headers.join(' & ') + ' \\\\ '; for(let i=0;i<st.tableau.length;i++){ const row=st.tableau[i]; const cells=[]; cells.push(`$${row.basic}$`); for(let j=0;j<row.coeffs.length;j++) cells.push(formatNum(row.coeffs[j])); for(let j=0;j<row.slack.length;j++) cells.push(formatNum(row.slack[j])); cells.push(formatNum(row.rhs)); s+=cells.join(' & ') + ' \\\\ \n'; } const or=st.objRow; const orcells=[]; orcells.push(`$${or.basic}$`); for(let j=0;j<or.coeffs.length;j++) orcells.push(formatNum(or.coeffs[j])); for(let j=0;j<or.slack.length;j++) orcells.push(formatNum(or.slack[j])); orcells.push(formatNum(or.rhs)); s+='\\\hline ' + orcells.join(' & ') + ' \\\\ \n'; s+='\\end{array}\\]'; return s; }
+function tableToLatex(st){
+  const columns = ['c', ...Array(st.vars.length + st.slackNames.length + 1).fill('r')].join('');
+  const headers = ['\\mathrm{BV}', ...st.vars.map(v => `$${v}$`), ...st.slackNames.map(name => `$${name}$`), '$\\mathrm{RHS}$'];
+  const formatRow = row => [
+    `$${row.basic}$`,
+    ...row.coeffs.map(formatNum),
+    ...row.slack.map(formatNum),
+    formatNum(row.rhs)
+  ].join(' & ');
+  const rows = [
+    formatRow(st.objRow),
+    ...st.tableau.map(formatRow)
+  ];
+  return `\\[\\begin{array}{${columns}}${headers.join(' & ')} \\\\ \\hline ${rows.join(' \\\\ ')} \\\\ \\end{array}\\]`;
+}
 
 // Convert LaTeX input to ASCII for parser
 function latexToAscii(s){ if(!s) return ''; let t=s; t=t.replace(/\\leq|\\le/g,' <= '); t=t.replace(/\\geq|\\ge/g,' >= '); t=t.replace(/<=|>=|=/g,m => ` ${m} `); t=t.replace(/\\cdot/g,'*'); t=t.replace(/\\times/g,'*'); t=t.replace(/\u2264/g,' <= '); t=t.replace(/\u2265/g,' >= '); t=t.replace(/([A-Za-z])\s*_\s*\{\s*(\d+)\s*\}/ig,'$1$2'); t=t.replace(/([A-Za-z])\s*_\s*(\d+)/ig,'$1$2'); t=t.replace(/(\d)([A-Za-z]\w*)/ig,'$1 $2'); t=t.replace(/\$/g,''); t=t.replace(/\s+/g,' '); return t.trim(); }
@@ -493,15 +517,28 @@ function updateSimplexMethodOptions(constraints){
   const options = Array.from(select.options);
   options.forEach(option => {
     const available = standardModel
-      ? option.value === 'simplex'
-      : option.value === 'big-m' || option.value === 'two-phase';
+      ? ['simplex', 'graphical'].includes(option.value)
+      : ['big-m', 'two-phase', 'graphical'].includes(option.value);
     option.disabled = !available;
     option.hidden = !available;
   });
-  const availableValues = standardModel ? ['simplex'] : ['big-m', 'two-phase'];
+  const availableValues = standardModel ? ['simplex', 'graphical'] : ['big-m', 'two-phase', 'graphical'];
   select.value = availableValues.includes(selected)
     ? selected
     : standardModel ? 'simplex' : 'big-m';
+}
+
+function updateMethodControls(){
+  const method = $id('method-pl')?.value;
+  const calculateButton = $id('btn-calc-pl');
+  if(calculateButton){
+    calculateButton.textContent = {
+      simplex: 'Calcular Símplex',
+      'big-m': 'Calcular Gran M',
+      'two-phase': 'Calcular Dos Fases',
+      graphical: 'Resolver método gráfico'
+    }[method] || 'Calcular método';
+  }
 }
 
 // helper to create step cards in #steps
@@ -535,10 +572,12 @@ function computeSolutionFromTable(st){
 }
 
 // wire buttons to math-field inputs
-function initPLUI(){ const objField = $id('objective-field'); const consField = $id('constraint-field'); const addBtn = $id('btn-add-constraint'); const clearConsBtn = $id('btn-clear-constraints'); const calcBtn = $id('btn-calc-pl'); const clearAllBtn = $id('btn-clear-all'); const status = $id('status'); renderConstraintBracket(constraintsLatex);
+function initPLUI(){ const objField = $id('objective-field'); const consField = $id('constraint-field'); const addBtn = $id('btn-add-constraint'); const clearConsBtn = $id('btn-clear-constraints'); const calcBtn = $id('btn-calc-pl'); const clearAllBtn = $id('btn-clear-all'); const status = $id('status'); const methodSelect = $id('method-pl'); renderConstraintBracket(constraintsLatex);
 
   objField.addEventListener('input', updateVariableDomainControls);
+  methodSelect.addEventListener('change', updateMethodControls);
   updateVariableDomainControls();
+  updateMethodControls();
   addBtn.addEventListener('click', ()=>{ const raw = consField.value.trim(); if(!raw) return; constraintsLatex.push(raw); renderConstraintBracket(constraintsLatex); updateVariableDomainControls(); consField.value = ''; consField.focus(); if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs(); });
   clearConsBtn.addEventListener('click', ()=>{ constraintsLatex.length = 0; renderConstraintBracket(constraintsLatex); updateVariableDomainControls(); $id('preflight').className='verification-box'; $id('preflight').textContent='Añade la función objetivo y las restricciones para comprobar el modelo.'; if(typeof simplexDesmos !== 'undefined' && simplexDesmos) simplexDesmos.setBlank(); });
   calcBtn.addEventListener('click', ()=>{ // calculate simplex
@@ -561,6 +600,23 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       const consAsciiLines = consL.map(l=> latexToAscii(l));
       console.log('Constraints ASCII lines:', consAsciiLines);
       const parsedConstraints = parseConstraints(consAsciiLines.join('\n'));
+      const method = $id('method-pl') ? $id('method-pl').value : 'big-m';
+      if(method === 'graphical'){
+        obj.vars = collectVars(obj, parsedConstraints);
+        if(obj.vars.length !== 2) throw new Error('El método gráfico solo se puede aplicar a modelos con exactamente dos variables.');
+        obj.variableDomains = variableDomains;
+        const report = validateSimplexModel(obj, parsedConstraints, sense, method);
+        renderPreflightReport(report);
+        if(!report.ok) throw new Error('El modelo gráfico necesita al menos una restricción válida.');
+        const result = solveGraphicalModel(obj, parsedConstraints);
+        renderGraphicalResult(result, obj, parsedConstraints);
+        renderGraphicalVerification(result, obj);
+        plotGraphicalModel(obj, parsedConstraints, result);
+        status.textContent = result.unbounded
+          ? 'La región factible es no acotada en la dirección de mejora de Z.'
+          : result.optimum ? 'Método gráfico completado.' : 'No se encontró una región factible.';
+        return;
+      }
       // x ≥ 0, y ≥ 0, ... ya son condiciones propias del simplex estándar;
       // no se agregan como filas artificiales de tipo ≥ al tableau.
       const implicitNonNegative = parsedConstraints.filter(constraint =>
@@ -571,7 +627,6 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       const implicitConstraints = new Set(implicitNonNegative);
       const cons = parsedConstraints.filter(constraint => !implicitConstraints.has(constraint));
       console.log('Parsed constraints:', cons);
-      const method = $id('method-pl') ? $id('method-pl').value : 'big-m';
       const preflight = validateSimplexModel(obj, cons, sense, method);
       if(implicitNonNegative.length) preflight.notes.push(`Se reconocieron ${implicitNonNegative.length} condición(es) de no negatividad implícita(s).`);
       renderPreflightReport(preflight);
