@@ -7,4 +7,4 @@ Desde esta carpeta ejecuta:
 node server-local.js
 ```
 
-Después abre [Programación lineal](http://localhost:8080/pages/programacion-lineal/) en el navegador.
+Después abre [http://localhost:8080/](http://localhost:8080/); la página principal abre directamente Programación Lineal.

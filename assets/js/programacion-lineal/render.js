@@ -1,5 +1,4 @@
-// Render/parser/solver adapted for Programación Lineal page
-// Based on assets/js/simplex.js with UI wiring to math-field elements
+// Parser, solver and interface wiring for the linear programming page.
 
 function $id(id){ return document.getElementById(id); }
 

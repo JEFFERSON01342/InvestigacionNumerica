@@ -1,337 +1,191 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>GeoMath | Programación Lineal</title>
+    <link rel="stylesheet" href="assets/css/global.css">
+    <script>
+        try {
+            if (localStorage.getItem('geomath-theme') === 'dark') {
+                document.documentElement.dataset.theme = 'dark';
+            }
+        } catch (error) {
+            console.warn('No se pudo recuperar la preferencia de tema:', error);
+        }
+    </script>
+    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20260930-14">
+    <link rel="icon" type="image/png" href="assets/img/logo.png">
 
-    <meta charset="UTF-8">
+    <script src="https://unpkg.com/mathlive@0.110.0"></script>
 
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
-
-    <title>GeoMath</title>
-
-    <!-- GLOBAL -->
-    <link rel="stylesheet"
-          href="assets/css/global.css">
-
-    <!-- HOME -->
-    <link rel="stylesheet"
-          href="assets/css/home.css">
-
-    <!-- ICON -->
-    <link rel="icon"
-          type="image/png"
-          href="assets/img/logo.png">
-
+    <script src="https://www.desmos.com/api/v1.11/calculator.js?apiKey=95ae3c138c5845289c3d45408fc8839f"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script>
+        window.MathJax = {
+            loader: {
+                // \class{...}{...} usado para resaltar la celda pivote.
+                load: ['[tex]/html']
+            },
+            tex: {
+                packages: {'[+]': ['html']}
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
-
-<body>
-
-<!-- ===================== -->
-<!-- HEADER -->
-<!-- ===================== -->
+<body class="pl-page">
 <header class="header-pro">
-
     <div class="navbar">
-
-        <div class="logo-area">
-
-            <h1>GeoMath</h1>
-
-        </div>
-
-        <nav>
-
-            <ul class="nav-links">
-
-                <li>
-                    <a class="active-link"
-                       href="index.html">
-
-                        Home
-                    </a>
-                </li>
-
-                <li>
-                    <a href="pages/raices/index.html">
-
-                        Raíces
-                    </a>
-                </li>
-
-                <li>
-                    <a href="pages/matrices/index.html">
-
-                        Matrices
-                    </a>
-                </li>
-
-                <li>
-                    <a href="pages/taylor/index.html">
-
-                        Taylor
-                    </a>
-                </li>
-
-                <li>
-                    <a href="pages/interpolacion/index.html">
-
-                        Interpolacion
-                    </a>
-                </li>
-
-                <li>
-                    <a href="pages/integracion/index.html">
-
-                        Integracion
-                    </a>
-                </li>
-
-            </ul>
-
-        </nav>
-
+        <div class="logo-area"><h1>GeoMath</h1></div>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">
+            Activar modo oscuro
+        </button>
     </div>
-
-    <!-- HERO -->
-    <div class="hero-home">
-
-        <div class="hero-left">
-
-            <span class="badge">
-
-                Plataforma Matemática Numérica
-            </span>
-
-            <h2>
-
-                Explora métodos numéricos
-                de forma visual e interactiva
-
-            </h2>
-
-            <p>
-
-                GeoMath integra herramientas para
-                resolución de raíces, álgebra matricial,
-                series de Taylor, interpolación, integración y visualización matemática
-                avanzada en una sola plataforma moderna.
-
-            </p>
-
-            <div class="hero-buttons">
-
-                <a href="pages/raices/index.html"
-                   class="hero-btn primary-btn">
-
-                    Comenzar
-                </a>
-
-                <a href="#modulos"
-                   class="hero-btn secondary-btn">
-
-                    Ver módulos
-                </a>
-
-            </div>
-
-        </div>
-
-        <div class="hero-right">
-
-            <div class="math-card floating-card">
-
-                <h3>f(x)=x³-2x-5</h3>
-
-                <p>Raíz aproximada:</p>
-
-                <span>x ≈ 2.09455</span>
-
-            </div>
-
-            <div class="math-card small-card">
-
-                <h3>Taylor</h3>
-
-                <p>
-
-                    eˣ ≈ 1 + x + x²/2! + ...
-
-                </p>
-
-            </div>
-
-        </div>
-
+    <div class="hero-text">
+        <h2>Programación Lineal</h2>
+        <p>Métodos Símplex, Gran M, Dos Fases y método gráfico con entrada LaTeX.</p>
     </div>
-
 </header>
 
-<!-- ===================== -->
-<!-- MODULOS -->
-<!-- ===================== -->
-<section class="container" id="modulos">
-
-    <div class="section-title">
-
-        <h2>Módulos Disponibles</h2>
-
-        <p>
-
-            Herramientas matemáticas diseñadas
-            para análisis numérico moderno.
-
-        </p>
-
-    </div>
-
-    <div class="modules-grid">
-
-        <!-- RAICES -->
-        <a href="pages/raices/index.html"
-           class="module-card">
-
-            <div class="module-icon">
-
-                √
-
+<main class="matrix-layout">
+    <section class="main-content">
+        <div class="container">
+            <div class="card">
+                <h2>Configuración</h2>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <label>Objetivo</label>
+                        <div>
+                            <label><input type="radio" name="sense-pl" value="max" checked> Maximizar</label>
+                            <label><input type="radio" name="sense-pl" value="min"> Minimizar</label>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <label for="method-pl">Método</label>
+                        <select id="method-pl">
+                            <option value="simplex" selected>Símplex estándar</option>
+                            <option value="big-m">Gran M</option>
+                            <option value="two-phase">Dos Fases</option>
+                            <option value="graphical">Método gráfico (2 variables)</option>
+                        </select>
+                    </div>
+                    <div class="config-item variable-domains-item">
+                        <label>Signo de cada variable</label>
+                        <div id="variable-domains-pl" class="variable-domains">
+                            Escribe la función objetivo o añade restricciones para detectar las variables.
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <h3>Raíces de Ecuaciones</h3>
-
-            <p>
-
-                Métodos de Bisección,
-                Newton, Secante,
-                Punto Fijo y más.
-
-            </p>
-
-        </a>
-
-        <!-- MATRICES -->
-        <a href="pages/matrices/index.html"
-           class="module-card">
-
-            <div class="module-icon">
-
-                ⬚
-
+            <div class="card funcion-box">
+                <h2>Función objetivo Z</h2>
+                <div class="funcion-wrapper">
+                    <div class="funcion-label">Z =</div>
+                    <math-field id="objective-field"></math-field>
+                </div>
+                <p>Las fracciones se calculan exactamente y las tablas se muestran en fracciones. La solución final también incluye su aproximación decimal.</p>
+                <div id="preview-objective" class="preview-box">$$Z=$$</div>
             </div>
 
-            <h3>Matrices</h3>
-
-            <p>
-
-                Operaciones matriciales,
-                determinantes,
-                Gauss y álgebra lineal.
-
-            </p>
-
-        </a>
-
-        <!-- TAYLOR -->
-        <a href="pages/taylor/index.html"
-           class="module-card">
-
-            <div class="module-icon">
-
-                Σ
-
+            <div class="card funcion-box">
+                <h2>Restricción (una por vez)</h2>
+                <div class="funcion-wrapper">
+                    <math-field id="constraint-field"></math-field>
+                </div>
+                <div class="acciones-container">
+                    <button id="btn-add-constraint">Añadir restricción</button>
+                    <button id="btn-clear-constraints">Limpiar lista</button>
+                </div>
+                <div>
+                    <label>Restricciones añadidas</label>
+                    <div id="constraintBracket" class="constraint-bracket">\(\left\{\begin{array}{l} \text{(vacío)}\\\end{array}\right.\)</div>
+                </div>
             </div>
 
-            <h3>Series de Taylor</h3>
-
-            <p>
-
-                Aproximaciones polinómicas,
-                derivadas y expansión de funciones.
-
-            </p>
-
-        </a>
-
-        <!-- INTERPOLACION -->
-        <a href="pages/interpolacion/index.html"
-           class="module-card">
-
-            <div class="module-icon">
-
-                Δ
-
+            <div class="card">
+                <div class="acciones-container">
+                    <button id="btn-calc-pl">Calcular Símplex</button>
+                    <button id="btn-clear-all">Limpiar todo</button>
+                </div>
             </div>
 
-            <h3>Interpolación</h3>
-
-            <p>
-
-                Métodos de Newton,
-                Lagrange y trazadores para
-                aproximar datos.
-
-            </p>
-
-        </a>
-
-        <!-- INTEGRACION -->
-        <a href="pages/integracion/index.html"
-           class="module-card">
- 
-            <div class="module-icon">
- 
-                ∫
- 
+            <div class="card">
+                <h2>Comprobación previa</h2>
+                <div id="preflight" class="verification-box">Añade la función objetivo y las restricciones para comprobar el modelo.</div>
             </div>
- 
-            <h3>Integración Numérica</h3>
- 
-            <p>
- 
-                Rectángulos, trapecio compuesto
-                y Romberg para aproximar integrales definidas.
- 
-            </p>
- 
-        </a>
- 
-        <!-- PROGRAMACION LINEAL -->
-        <a href="pages/programacion-lineal/index.html"
-           class="module-card">
- 
-            <div class="module-icon">
- 
-                ⧉
- 
+
+            <div class="card simplex-steps-card">
+                <h2>Resultados y pasos del método</h2>
+                <div id="steps"></div>
             </div>
- 
-            <h3>Programación Lineal</h3>
- 
-            <p>
- 
-                Método Simplex paso a paso, entrada en LaTeX y procedimiento detallado.
- 
-            </p>
- 
-        </a>
- 
-    </div>
 
-</section>
+            <div class="card">
+                <h2>Comprobación de resultados</h2>
+                <div id="verification" class="verification-box">Aquí se verificará la solución al finalizar el método.</div>
+            </div>
 
-<!-- ===================== -->
-<!-- FOOTER -->
-<!-- ===================== -->
-<footer class="footer">
+            <div class="card">
+                <h2>Gráfica (si aplica)</h2>
+                <div id="plot" style="width:100%;height:360px;"></div>
+            </div>
 
-    <p>
+            <div class="card">
+                <div id="status" class="status"></div>
+            </div>
+        </div>
+    </section>
 
-        GeoMath © 2026
-        • Plataforma de Matemática Numérica
+</main>
 
-    </p>
+<script src="assets/js/programacion-lineal/render.js?v=20260930-12"></script>
+<script src="assets/js/programacion-lineal/patch.js?v=20260930-12"></script>
+<script>
+// Set up MathField options and preview wiring similar to Taylor
+document.addEventListener('DOMContentLoaded', ()=>{
+    const themeToggle = document.getElementById('theme-toggle');
+    function updateThemeToggle(){
+        const darkMode = document.documentElement.dataset.theme === 'dark';
+        themeToggle.setAttribute('aria-pressed', String(darkMode));
+        themeToggle.textContent = darkMode ? 'Activar modo claro' : 'Activar modo oscuro';
+    }
+    updateThemeToggle();
+    themeToggle.addEventListener('click', ()=>{
+        const darkMode = document.documentElement.dataset.theme !== 'dark';
+        document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+        try {
+            localStorage.setItem('geomath-theme', darkMode ? 'dark' : 'light');
+        } catch (error) {
+            console.warn('No se pudo guardar la preferencia de tema:', error);
+        }
+        updateThemeToggle();
+    });
 
-</footer>
+    const objField = document.getElementById('objective-field');
+    const consField = document.getElementById('constraint-field');
 
+    function configureMathField(field){
+        if(!field) return;
+        field.mathVirtualKeyboardPolicy = 'auto';
+        field.smartMode = true;
+        field.smartFence = true;
+        field.virtualKeyboardMode = 'manual';
+    }
+
+    configureMathField(objField);
+    configureMathField(consField);
+
+    const previewObj = document.getElementById('preview-objective');
+    function updatePreview(){
+        const value = objField && objField.value ? objField.value : '';
+        previewObj.innerHTML = `$$Z=${value}$$`;
+        typesetMath();
+    }
+    objField.addEventListener('input', updatePreview);
+    objField.addEventListener('input', ()=>{ if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs(); });
+    consField.addEventListener('input', ()=>{ typesetMath(); });
+});
+</script>
 </body>
 </html>

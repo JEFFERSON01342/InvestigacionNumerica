@@ -29,5 +29,5 @@ http.createServer((request, response) => {
   });
 }).listen(port, '127.0.0.1', () => {
   console.log(`GeoMath disponible en http://localhost:${port}/`);
-  console.log('Abre: http://localhost:8080/pages/programacion-lineal/');
+  console.log('Abre: http://localhost:8080/');
 });

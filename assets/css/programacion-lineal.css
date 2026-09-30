@@ -14,6 +14,14 @@
   align-items:stretch;
 }
 
+.pl-page .card{
+  background:#fff;
+  border:1px solid #f3f4f6;
+  border-radius:12px;
+  padding:18px;
+  box-shadow:0 12px 35px rgba(0,0,0,.06);
+}
+
 .pl-page .main-content .card{ margin-bottom:0; }
 
 .funcion-wrapper{ display:flex; align-items:center; gap:12px; }
@@ -72,10 +80,21 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 /* status */
 .status{ color:var(--accent); font-weight:600; margin-top:8px; }
 
-/* layout overrides for PL page to stack content vertically */
+.theme-toggle{
+  border:1px solid rgba(255,255,255,.7);
+  border-radius:10px;
+  padding:9px 14px;
+  background:rgba(255,255,255,.12);
+  color:#fff;
+  font:inherit;
+  font-weight:600;
+  cursor:pointer;
+}
+.theme-toggle:hover{ background:rgba(255,255,255,.22); }
+.theme-toggle:focus-visible{ outline:3px solid #fff; outline-offset:3px; }
+
+/* Layout for the standalone linear programming page */
 .pl-page .matrix-layout{ display:block; padding:0 20px; }
-.pl-page aside.sidebar{ position:relative; top:0; width:100%; min-width:0; margin:0 auto 8px; box-shadow:none; background:transparent; border:none; }
-.pl-page .sidebar{ width:auto; padding:0; }
 .pl-page .card{ width:100%; box-sizing:border-box; }
 
 /* math-field inner font size */
@@ -91,5 +110,78 @@ math-field::part(text){ font-size:18px; }
 .step-card .latex{ padding:6px 4px; }
 
 /* responsive */
-@media(max-width:900px){ .pl-page .container{ grid-template-columns: 1fr; width: calc(100% - 40px); } .pl-page aside.sidebar{ order:-1; } }
+@media(max-width:900px){ .pl-page .container{ grid-template-columns: 1fr; width: calc(100% - 40px); } }
 @media(max-width:520px){ .variable-domain-row{ align-items:stretch; flex-direction:column; gap:4px; } .variable-domain-row select{ width:100%; } }
+
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --accent:#f87171;
+  --muted:#1e293b;
+}
+html[data-theme="dark"] body.pl-page{
+  background:#0b1120;
+  color:#e2e8f0;
+}
+html[data-theme="dark"] .header-pro{
+  background:linear-gradient(135deg,#1e293b,#0f172a);
+}
+html[data-theme="dark"] .header-pro h2{ color:#f8fafc; }
+html[data-theme="dark"] .header-pro p{ color:#cbd5e1; }
+html[data-theme="dark"] .pl-page .card{
+  background:#111827;
+  border-color:#334155;
+  box-shadow:0 12px 35px rgba(0,0,0,.24);
+}
+html[data-theme="dark"] .pl-page h2{ color:#fca5a5; }
+html[data-theme="dark"] .pl-page .header-pro h2{ color:#f8fafc; }
+html[data-theme="dark"] .pl-page p,
+html[data-theme="dark"] .pl-page label,
+html[data-theme="dark"] .pl-page .variable-domain-row label{
+  color:#cbd5e1;
+}
+html[data-theme="dark"] .pl-page input[type="radio"]{ accent-color:#f87171; }
+html[data-theme="dark"] .pl-page select,
+html[data-theme="dark"] .pl-page math-field{
+  color:#e2e8f0;
+  background:#0f172a;
+  border-color:#475569;
+}
+html[data-theme="dark"] .pl-page math-field::part(container),
+html[data-theme="dark"] .pl-page math-field::part(content){
+  color:#e2e8f0;
+  background:#0f172a;
+}
+html[data-theme="dark"] .pl-page .preview-box{ color:#e2e8f0; }
+html[data-theme="dark"] .pl-page .constraint-bracket,
+html[data-theme="dark"] .pl-page #render-input{
+  color:#e2e8f0;
+  background:#1e293b;
+}
+html[data-theme="dark"] .pl-page #steps .step-card{
+  color:#e2e8f0;
+  background:#172033;
+  box-shadow:0 6px 18px rgba(0,0,0,.2);
+}
+html[data-theme="dark"] .pl-page .graphical-method{ background:#172a40 !important; }
+html[data-theme="dark"] .pl-page .free-variable-step{ background:#211d36 !important; }
+html[data-theme="dark"] .pl-page .big-m-objective{ background:#172a40; }
+html[data-theme="dark"] .pl-page .row-operations{ background:#30251a; }
+html[data-theme="dark"] .pl-page .simplex-solution,
+html[data-theme="dark"] .pl-page .verification-box.ok{ background:#123126; }
+html[data-theme="dark"] .pl-page .verification-box.error{ background:#3a1d26; }
+html[data-theme="dark"] .pl-page .verification-box.warning,
+html[data-theme="dark"] .pl-page .simplex-unbounded{ background:#362819 !important; }
+html[data-theme="dark"] .pl-page .phase-heading{ background:#332e1c; }
+html[data-theme="dark"] .pl-page .graphical-optimum{ background:#16402d; }
+html[data-theme="dark"] .pl-page .graphical-vertices th,
+html[data-theme="dark"] .pl-page .graphical-vertices td{ border-color:#475569; }
+html[data-theme="dark"] .pl-page .graphical-coordinate-step{ border-color:#475569; }
+html[data-theme="dark"] .pl-page .verification-box{ color:#e2e8f0; }
+html[data-theme="dark"] .pl-page .status{ color:#fca5a5; }
+html[data-theme="dark"] .pl-page .acciones-container button.secondary{
+  color:#fca5a5;
+  background:#1e293b;
+  border-color:#7f1d1d;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-track{ background:#0f172a; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb{ border-color:#0f172a; }
