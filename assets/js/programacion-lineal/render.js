@@ -151,6 +151,9 @@ function buildTableau(obj, constraints){
   const slackNames = [];
   const rows = [];
   const artificialColumns = [];
+  let slackCount = 0;
+  let excessCount = 0;
+  let artificialCount = 0;
   const normalizedConstraints = constraints.map(constraint => {
     if(constraint.rhs >= 0) return {...constraint, coeffs: {...constraint.coeffs}};
     const reversed = { '<=': '>=', '>=': '<=', '=': '=' }[constraint.op];
@@ -171,12 +174,12 @@ function buildTableau(obj, constraints){
     });
     let basic;
     if(constraint.op === '<='){
-      basic = `S${rowIndex + 1}`;
+      basic = `S${++slackCount}`;
       slackNames.push(basic);
       rows.push({ coeffs: row, extra: [{name: basic, value: 1}], rhs: constraint.rhs, basic });
     } else if(constraint.op === '>='){
-      const excess = `E${rowIndex + 1}`;
-      const artificial = `A${rowIndex + 1}`;
+      const excess = `E${++excessCount}`;
+      const artificial = `A${++artificialCount}`;
       slackNames.push(excess, artificial);
       artificialColumns.push(slackNames.length - 1);
       rows.push({
@@ -186,7 +189,7 @@ function buildTableau(obj, constraints){
         basic: artificial
       });
     } else {
-      const artificial = `A${rowIndex + 1}`;
+      const artificial = `A${++artificialCount}`;
       slackNames.push(artificial);
       artificialColumns.push(slackNames.length - 1);
       rows.push({ coeffs: row, extra: [{name: artificial, value: 1}], rhs: constraint.rhs, basic: artificial });
@@ -312,6 +315,7 @@ function updateVariableDomainControls(){
     try { constraints.push(...parseConstraints(latexToAscii(line))); }
     catch(error){ console.debug('La restricción aún está incompleta:', error.message); }
   });
+  updateSimplexMethodOptions(constraints);
   const variables = collectVars(objective, constraints);
   container.replaceChildren();
   if(!variables.length){
@@ -322,7 +326,7 @@ function updateVariableDomainControls(){
     ['nonnegative', '≥ 0 (no negativa)'],
     ['nonpositive', '≤ 0 (no positiva)'],
     ['zero', '= 0 (fija)'],
-    ['free', 'Irrestricta (libre)']
+    ['free', 'Libre (sin restricción de signo)']
   ];
   variables.forEach(variable => {
     const row = document.createElement('div');
@@ -349,6 +353,34 @@ function updateVariableDomainControls(){
     row.append(label, select);
     container.appendChild(row);
   });
+}
+
+function isStandardSimplexModel(constraints){
+  return constraints.every(constraint => {
+    const operator = constraint.rhs < 0
+      ? {'<=': '>=', '>=': '<=', '=': '='}[constraint.op]
+      : constraint.op;
+    return operator === '<=';
+  });
+}
+
+function updateSimplexMethodOptions(constraints){
+  const select = $id('method-pl');
+  if(!select) return;
+  const standardModel = isStandardSimplexModel(constraints);
+  const selected = select.value;
+  const options = Array.from(select.options);
+  options.forEach(option => {
+    const available = standardModel
+      ? option.value === 'simplex'
+      : option.value === 'big-m' || option.value === 'two-phase';
+    option.disabled = !available;
+    option.hidden = !available;
+  });
+  const availableValues = standardModel ? ['simplex'] : ['big-m', 'two-phase'];
+  select.value = availableValues.includes(selected)
+    ? selected
+    : standardModel ? 'simplex' : 'big-m';
 }
 
 // helper to create step cards in #steps
@@ -423,10 +455,10 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       if(implicitNonNegative.length) preflight.notes.push(`Se reconocieron ${implicitNonNegative.length} condición(es) de no negatividad implícita(s).`);
       renderPreflightReport(preflight);
       if(!preflight.ok) throw new Error('El modelo no puede resolverse con el simplex estándar. Revisa la comprobación previa.');
-      const steps = method === 'two-phase' ? twoPhaseSteps(obj, cons) : simplexSteps(obj, cons);
+      const steps = method === 'two-phase' ? twoPhaseSteps(obj, cons) : simplexSteps(obj, cons, method);
       console.log('Simplex produced steps count:', steps.length);
       if(!steps || steps.length===0){ status.textContent='No se generaron pasos (revisar entrada).'; return; }
-      renderStepsLatex(steps);
+      renderStepsLatex(steps, obj, cons);
       const lastState = steps[steps.length - 1].after || steps[steps.length - 1].state;
       if(steps[steps.length - 1].type === 'unbounded') {
         renderUnboundedVerification();

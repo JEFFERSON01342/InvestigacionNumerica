@@ -9,21 +9,42 @@ function tableauColumnName(state, columnIndex){
   return columnIndex < state.vars.length ? state.vars[columnIndex] : state.slackNames[columnIndex - state.vars.length];
 }
 
-// También se revisan las holguras: después de un pivote pueden tener costo
-// reducido negativo y revelar que el problema no está acotado.
-function findEntering(objRow){
-  const values = [...objRow.coeffs, ...objRow.slack];
-  let minimum = 0, index = -1;
-  values.forEach((value, column) => { if(value < minimum){ minimum = value; index = column; } });
-  return index;
+function tableauColumnIndex(state, name){
+  const variableIndex = state.vars.indexOf(name);
+  return variableIndex >= 0 ? variableIndex : state.vars.length + state.slackNames.indexOf(name);
 }
 
-function findLeaving(tableau, enteringIndex){
-  let bestRatio = Infinity, rowIndex = -1;
+// Regla de Bland: elegir la primera columna elegible y desempatar la razón
+// mínima por el índice de la variable básica para evitar ciclos.
+function findEnteringBland(state, excludeArtificial = false){
+  const basicVariables = new Set(state.tableau.map(row => row.basic));
+  const values = [...state.objRow.coeffs, ...state.objRow.slack];
+  for(let column = 0; column < values.length; column++){
+    const name = tableauColumnName(state, column);
+    if(basicVariables.has(name) || (excludeArtificial && /^A\d+$/.test(name))) continue;
+    if(values[column] < -1e-10) return column;
+  }
+  return -1;
+}
+
+function findLeaving(tableau, enteringIndex, state){
+  let bestRatio = Infinity, rowIndex = -1, bestBasicIndex = Infinity;
   tableau.forEach((row, index) => {
     const coefficient = tableauValue(row, enteringIndex);
+    if(coefficient <= 1e-12) return;
     const ratio = row.rhs / coefficient;
-    if(coefficient > 1e-12 && ratio >= -1e-12 && ratio < bestRatio){ bestRatio = ratio; rowIndex = index; }
+    if(ratio < -1e-10) return;
+    const nonnegativeRatio = Math.max(0, ratio);
+    const basicIndex = state ? tableauColumnIndex(state, row.basic) : index;
+    const tolerance = Number.isFinite(bestRatio)
+      ? 1e-10 * Math.max(1, Math.abs(nonnegativeRatio), Math.abs(bestRatio))
+      : 0;
+    if(!Number.isFinite(bestRatio) || nonnegativeRatio < bestRatio - tolerance ||
+      (Math.abs(nonnegativeRatio - bestRatio) <= tolerance && basicIndex < bestBasicIndex)){
+      bestRatio = nonnegativeRatio;
+      bestBasicIndex = basicIndex;
+      rowIndex = index;
+    }
   });
   return rowIndex;
 }
@@ -58,10 +79,11 @@ function pivotOn(state, enteringIndex, leavingRowIdx){
   return operation;
 }
 
-function simplexSteps(obj, constraints){
+function simplexSteps(obj, constraints, method = 'big-m'){
   const built = buildTableau(obj, constraints);
   const state = { vars: built.vars, slackNames: built.slackNames, tableau: built.tableau, objRow: built.objRow };
   const metadata = {
+    method,
     objectiveDirection: built.objectiveDirection,
     bigM: built.bigM,
     objectiveSense: built.objectiveSense,
@@ -74,9 +96,9 @@ function simplexSteps(obj, constraints){
   const steps = [{ type: 'initial', state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata) }];
 
   for(let iteration = 0; iteration < 200; iteration++){
-    const enteringIndex = findEntering(state.objRow);
+    const enteringIndex = findEnteringBland(state);
     if(enteringIndex === -1) return steps;
-    const leavingRowIdx = findLeaving(state.tableau, enteringIndex);
+    const leavingRowIdx = findLeaving(state.tableau, enteringIndex, state);
     // No se detiene antes de renderizar: se conserva la tabla que evidencia
     // que la variable entrante no posee una razón positiva para salir.
     if(leavingRowIdx === -1){
@@ -112,26 +134,15 @@ function setObjectiveRow(state, variableCoeffs, slackCoeffs, rhs){
 function appendSimplexPhaseSteps(state, metadata, steps, phase){
   for(let iteration = 0; iteration < 200; iteration++){
     const enteringIndex = phase === 2
-      ? findEnteringWithoutArtificial(state)
-      : findEntering(state.objRow);
+      ? findEnteringBland(state, true)
+      : findEnteringBland(state);
     if(enteringIndex === -1) return;
-    const leavingRowIdx = findLeaving(state.tableau, enteringIndex);
+    const leavingRowIdx = findLeaving(state.tableau, enteringIndex, state);
     if(leavingRowIdx === -1){
       steps.push({ type: 'unbounded', phase, state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase}) , enteringIndex });
       return;
     }
 
-    function findEnteringWithoutArtificial(state){
-      const values = [...state.objRow.coeffs, ...state.objRow.slack];
-      let minimum = 0;
-      let index = -1;
-      values.forEach((value, column) => {
-        const name = tableauColumnName(state, column);
-        if(/^A\d+$/.test(name)) return;
-        if(value < minimum){ minimum = value; index = column; }
-      });
-      return index;
-    }
     const before = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase});
     const operation = pivotOn(state, enteringIndex, leavingRowIdx);
     const after = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase});
@@ -197,9 +208,13 @@ function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
     if(improves && !limitsVariable) notes.push(`${variable} puede mejorar Z sin un límite superior aparente; el simplex lo comprobará mostrando sus iteraciones.`);
   });
   if(!issues.length){
-    notes.push(method === 'two-phase'
-      ? 'Se aplicará Dos Fases: la Fase I encuentra una solución básica factible y la Fase II optimiza la función original.'
-      : 'Se aplicará Gran M: ≤ agrega holgura, ≥ agrega exceso y artificial, e igual agrega artificial.');
+    if(method === 'simplex'){
+      notes.push('Se aplicará Símplex estándar: las restricciones proporcionan una base inicial de holguras y no se necesitan variables artificiales.');
+    } else {
+      notes.push(method === 'two-phase'
+        ? 'Se aplicará Dos Fases: la Fase I encuentra una solución básica factible y la Fase II optimiza la función original.'
+        : 'Se aplicará Gran M: ≤ agrega holgura, ≥ agrega exceso y artificial, e igual agrega artificial.');
+    }
   }
   if(!issues.length && !notes.length) notes.push('Cada dirección que mejora Z tiene al menos una restricción que la limita inicialmente.');
   return { ok: !issues.length, issues, notes };
@@ -313,10 +328,80 @@ function bigMObjectiveFormula(state){
   return terms.join(' ').replace(/^\+ /, '').replace(/  +/g, ' ');
 }
 
+function simplexNameToLatex(name){
+  const match = name.match(/^([A-Za-z]+)(\d+)([+-])?$/);
+  if(!match) return name;
+  return `${match[1]}_{${match[2]}}${match[3] ? `^{${match[3]}}` : ''}`;
+}
+
+function linearCombinationToLatex(terms){
+  const nonzeroTerms = terms.filter(term => Math.abs(term.coefficient) > 1e-12);
+  if(!nonzeroTerms.length) return '0';
+  return nonzeroTerms.map((term, index) => {
+    const negative = term.coefficient < 0;
+    const magnitude = Math.abs(term.coefficient);
+    const coefficient = Math.abs(magnitude - 1) < 1e-12 ? '' : formatNum(magnitude);
+    const value = `${coefficient}${simplexNameToLatex(term.variable)}`;
+    if(index === 0) return negative ? `-${value}` : value;
+    return negative ? ` - ${value}` : ` + ${value}`;
+  }).join('');
+}
+
+function transformedExpressionToLatex(coefficients, state){
+  const terms = [];
+  (state.originalVars || Object.keys(coefficients)).forEach(variable => {
+    const coefficient = coefficients[variable] || 0;
+    const mapping = state.variableMap && state.variableMap[variable];
+    if(!mapping){
+      terms.push({coefficient, variable});
+      return;
+    }
+    if(mapping.positive !== null) terms.push({coefficient, variable: state.vars[mapping.positive]});
+    if(mapping.negative !== null) terms.push({coefficient: -coefficient, variable: state.vars[mapping.negative]});
+  });
+  return linearCombinationToLatex(terms);
+}
+
+function renderFreeVariableTransformation(container, state, obj, constraints){
+  if(!state.freeVariables) return;
+  const substitutions = state.originalVars
+    .filter(variable => state.variableDomains[variable] !== 'nonnegative')
+    .map(variable => {
+      const mapping = state.variableMap[variable];
+      const positive = mapping.positive === null ? null : simplexNameToLatex(state.vars[mapping.positive]);
+      const negative = mapping.negative === null ? null : simplexNameToLatex(state.vars[mapping.negative]);
+      if(state.variableDomains[variable] === 'free'){
+        return `\\(${simplexNameToLatex(variable)} = ${positive} - ${negative}\\)<br>\\(${positive}, ${negative} \\ge 0\\)`;
+      }
+      if(state.variableDomains[variable] === 'nonpositive'){
+        return `\\(${simplexNameToLatex(variable)} = -${negative},\\quad ${negative} \\ge 0\\)`;
+      }
+      return `\\(${simplexNameToLatex(variable)} = 0\\)`;
+    });
+  const objective = transformedExpressionToLatex(obj.coeffs, state);
+  const objectiveSense = obj.sense === 'min' ? 'Minimizar' : 'Maximizar';
+  const transformedConstraints = constraints.map(constraint =>
+    `<li>\\(${transformedExpressionToLatex(constraint.coeffs, state)} ${constraintOperatorLatex(constraint.op)} ${formatNum(constraint.rhs)}\\)</li>`
+  ).join('');
+  const card = document.createElement('article');
+  card.className = 'step-card free-variable-step';
+  card.innerHTML = `<h3>Cambio de variables libres</h3>
+    <p>Para aplicar el método símplex, cada variable libre se expresa como la diferencia de dos variables no negativas:</p>
+    <div class="free-variable-equations">${substitutions.join('<br>')}</div>
+    <h4>Modelo después de sustituir</h4>
+    <div class="free-variable-model">
+      <p><strong>${objectiveSense}:</strong> \\(Z = ${objective}\\)</p>
+      <ul>${transformedConstraints}</ul>
+    </div>
+    <p>Las variables \\(x_i^+\\) y \\(x_i^-\\) quedan como columnas independientes; las columnas de holgura, exceso y artificial se agregan según cada restricción antes de iniciar las iteraciones.</p>`;
+  container.appendChild(card);
+}
+
 function orderedSlackIndexes(state){
-  const order = { E: 0, A: 1, S: 2 };
+  const order = { S: 0, E: 1, A: 2 };
   return state.slackNames
     .map((name, index) => ({ name, index }))
+    .filter(item => !(state.method === 'two-phase' && state.phase === 2 && /^A\d+$/.test(item.name)))
     .sort((left, right) => {
       const leftPrefix = (left.name.match(/^[EAS]/i) || [''])[0].toUpperCase();
       const rightPrefix = (right.name.match(/^[EAS]/i) || [''])[0].toUpperCase();
@@ -329,32 +414,71 @@ function orderedSlackValues(values, indexes){
   return indexes.map(index => values[index]);
 }
 
+function formatTableauNumber(value, state){
+  if(state.bigM) return formatBigM(value, state);
+  if(Math.abs(value) < 1e-9) return '0';
+  for(let denominator = 2; denominator <= 100; denominator++){
+    const numerator = Math.round(value * denominator);
+    if(Math.abs(value - numerator / denominator) >= 1e-8) continue;
+    const greatestCommonDivisor = (left, right) => right ? greatestCommonDivisor(right, left % right) : left;
+    const divisor = greatestCommonDivisor(Math.abs(numerator), denominator);
+    const reducedNumerator = Math.abs(numerator) / divisor;
+    const reducedDenominator = denominator / divisor;
+    const sign = numerator < 0 ? '-' : '';
+    return reducedDenominator === 1
+      ? `${sign}${reducedNumerator}`
+      : `${sign}\\frac{${reducedNumerator}}{${reducedDenominator}}`;
+  }
+  return formatNum(value);
+}
+
+function displayTableauColumnIndex(state, columnIndex, slackIndexes){
+  if(columnIndex < state.vars.length) return columnIndex + 2;
+  const slackIndex = columnIndex - state.vars.length;
+  const displayedSlackIndex = slackIndexes.indexOf(slackIndex);
+  return displayedSlackIndex < 0 ? -1 : state.vars.length + displayedSlackIndex + 2;
+}
+
 function tableToLatexWithHighlight(state, highlight){
-  const columns = 'c' + 'r'.repeat(state.vars.length + state.slackNames.length + 2);
   const slackIndexes = orderedSlackIndexes(state);
-  const headers = ['\\mathrm{Basicas}', 'Z', ...state.vars, ...slackIndexes.map(index => state.slackNames[index]), '\\mathrm{Solucion}'];
+  const phaseOne = state.method === 'two-phase' && state.phase === 1;
+  const objectiveScale = phaseOne || state.objectiveSense === 'min' ? -1 : 1;
+  const objectiveName = phaseOne ? '\\rho' : 'Z';
+  const columns = 'c' + 'r'.repeat(state.vars.length + slackIndexes.length + 2);
+  const headers = ['\\text{Variables básicas}', objectiveName, ...state.vars.map(simplexNameToLatex), ...slackIndexes.map(index => simplexNameToLatex(state.slackNames[index])), '\\text{Solución}'];
   let latex = `\\[\\begin{array}{${columns}} ${headers.join(' & ')} \\\\ \\hline `;
 
   state.tableau.forEach((row, rowIndex) => {
-    const values = [row.basic, 0, ...row.coeffs, ...orderedSlackValues(row.slack, slackIndexes), row.rhs].map((value, columnIndex) => {
-      const formatted = typeof value === 'number' ? formatBigM(value, state) : value;
-      return highlight && rowIndex === highlight.leavingRowIdx && columnIndex === highlight.enteringIndex + 2
+    const values = [simplexNameToLatex(row.basic), 0, ...row.coeffs, ...orderedSlackValues(row.slack, slackIndexes), row.rhs].map((value, columnIndex) => {
+      const formatted = typeof value === 'number' ? formatTableauNumber(value, state) : value;
+      const pivotColumn = highlight
+        ? displayTableauColumnIndex(state, highlight.enteringIndex, slackIndexes)
+        : -1;
+      return highlight && rowIndex === highlight.leavingRowIdx && columnIndex === pivotColumn
         ? `\\class{pivot-cell}{${formatted}}` : formatted;
     });
     latex += `${values.join(' & ')} \\\\ `;
   });
-  latex += `\\hline ${[state.objRow.basic, 1, ...state.objRow.coeffs, ...orderedSlackValues(state.objRow.slack, slackIndexes), state.objRow.rhs].map(value => typeof value === 'number' ? formatBigM(value, state) : value).join(' & ')} \\\\ \\end{array}\\]`;
+  const objectiveValues = [
+    objectiveName,
+    1,
+    ...state.objRow.coeffs.map(value => value * objectiveScale),
+    ...orderedSlackValues(state.objRow.slack, slackIndexes).map(value => value * objectiveScale),
+    state.objRow.rhs * objectiveScale
+  ];
+  latex += `\\hline ${objectiveValues.map(value => typeof value === 'number' ? formatTableauNumber(value, state) : value).join(' & ')} \\\\ \\end{array}\\]`;
   return latex;
 }
 
-function renderStepsLatex(steps){
+function renderStepsLatex(steps, obj, constraints){
   const container = $id('steps');
   container.innerHTML = '';
   if(!steps.length) return;
 
   const initial = steps[0].state;
+  renderFreeVariableTransformation(container, initial, obj, constraints);
   container.insertAdjacentHTML('beforeend', '<h3>Tabla inicial</h3>');
-  if(initial.objectiveCoeffs && initial.method !== 'two-phase'){
+  if(initial.method !== 'two-phase' && initial.slackNames.some(name => /^A\d+$/.test(name))){
     container.insertAdjacentHTML('beforeend', `<p class="big-m-objective"><strong>Función penalizada:</strong> \\(Z = ${bigMObjectiveFormula(initial)}\\)</p>`);
   }
   if(initial.method === 'two-phase'){
@@ -379,9 +503,10 @@ function renderStepsLatex(steps){
     }
     if(step.type === 'unbounded'){
       const entering = tableauColumnName(step.state, step.enteringIndex);
+      const enteringLatex = `\\(${simplexNameToLatex(entering)}\\)`;
       const warning = document.createElement('article');
       warning.className = 'step-card simplex-unbounded';
-      warning.innerHTML = `<h3>Comprobación de no acotación</h3><p>La columna de <strong>${entering}</strong> sigue mejorando Z, pero no contiene coeficientes positivos en las restricciones. No hay razón mínima ni fila saliente.</p><p>Por tanto, ${entering} puede aumentar y Z crece indefinidamente.</p>`;
+      warning.innerHTML = `<h3>Comprobación de no acotación</h3><p>La columna de <strong>${enteringLatex}</strong> sigue mejorando Z, pero no contiene coeficientes positivos en las restricciones. No hay razón mínima ni fila saliente.</p><p>Por tanto, ${enteringLatex} puede aumentar y Z crece indefinidamente.</p>`;
       const table = document.createElement('div');
       table.className = 'simplex-table';
       table.innerHTML = tableToLatexWithHighlight(step.state);
@@ -392,11 +517,15 @@ function renderStepsLatex(steps){
     const { before, operation, after } = step;
     const entering = tableauColumnName(before, operation.enteringIndex);
     const leaving = before.tableau[operation.leavingRowIdx].basic;
+    const enteringLatex = `\\(${simplexNameToLatex(entering)}\\)`;
+    const leavingLatex = `\\(${simplexNameToLatex(leaving)}\\)`;
     const card = document.createElement('article');
     card.className = 'step-card';
-    const phaseLabel = step.phase ? `Fase ${step.phase}` : 'Gran M';
+    const phaseLabel = step.phase
+      ? `Fase ${step.phase}`
+      : before.method === 'simplex' ? 'Símplex' : 'Gran M';
     card.innerHTML = `<h3>${phaseLabel}: Iteración ${index + 1}</h3>
-      <p>Entra <strong>${entering}</strong> (coeficiente negativo en Z) y sale <strong>${leaving}</strong> (menor razón positiva).</p>
+      <p>Entra <strong>${enteringLatex}</strong> (coeficiente negativo en Z) y sale <strong>${leavingLatex}</strong> (menor razón positiva).</p>
       <p><strong>Pivote:</strong> fila ${operation.leavingRowIdx + 1}, columna ${entering}, valor ${formatNum(operation.pivot)}.</p>`;
     const highlighted = document.createElement('div');
     highlighted.className = 'simplex-table';
@@ -410,7 +539,7 @@ function renderStepsLatex(steps){
     if(Math.abs(operation.objectiveFactor || 0) > 1e-12) operations += `<br>\\(Z \\leftarrow Z - (${formatNum(operation.objectiveFactor)})R_{${operation.leavingRowIdx + 1}}\\)`;
     const operationsEl = document.createElement('p');
     operationsEl.className = 'row-operations';
-    operationsEl.innerHTML = `<strong>Operaciones para hacer cero la columna ${entering}:</strong><br>${operations}`;
+    operationsEl.innerHTML = `<strong>Operaciones para hacer cero la columna ${enteringLatex}:</strong><br>${operations}`;
     card.appendChild(operationsEl);
     const result = document.createElement('div');
     result.className = 'simplex-table';

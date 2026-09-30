@@ -6,7 +6,7 @@
     <title>GeoMath | Programación Lineal</title>
     <link rel="stylesheet" href="../../assets/css/global.css">
     <link rel="stylesheet" href="../../assets/css/matrices.css">
-    <link rel="stylesheet" href="../../assets/css/programacion-lineal.css?v=20260929-1">
+    <link rel="stylesheet" href="../../assets/css/programacion-lineal.css?v=20260930-2">
     <link rel="icon" type="image/png" href="../../assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -64,7 +64,8 @@
                     <div class="config-item">
                         <label for="method-pl">Método</label>
                         <select id="method-pl">
-                            <option value="big-m" selected>Gran M</option>
+                            <option value="simplex" selected>Símplex estándar</option>
+                            <option value="big-m">Gran M</option>
                             <option value="two-phase">Dos Fases</option>
                         </select>
                     </div>
@@ -113,7 +114,7 @@
                 <div id="preflight" class="verification-box">Añade la función objetivo y las restricciones para comprobar el modelo.</div>
             </div>
 
-            <div class="card">
+            <div class="card simplex-steps-card">
                 <h2>Pasos del Simplex</h2>
                 <div id="steps"></div>
             </div>
@@ -144,8 +145,8 @@
     </aside>
 </main>
 
-<script src="../../assets/js/programacion-lineal/render.js?v=20260929-1"></script>
-<script src="../../assets/js/programacion-lineal/patch.js?v=20260929-1"></script>
+<script src="../../assets/js/programacion-lineal/render.js?v=20260930-2"></script>
+<script src="../../assets/js/programacion-lineal/patch.js?v=20260930-2"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{

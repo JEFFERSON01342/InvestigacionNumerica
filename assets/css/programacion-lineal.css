@@ -9,7 +9,7 @@
   width: calc(100% - 80px);
   margin:18px auto;
   display:grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap:18px;
   align-items:stretch;
 }
@@ -34,6 +34,8 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 #steps{ display:flex; flex-direction:column; gap:12px; }
 #steps .step-card{ background:white; border-radius:12px; padding:10px; box-shadow:0 6px 18px rgba(0,0,0,0.06); }
 .simplex-table{ overflow-x:auto; padding:8px 0; }
+.simplex-steps-card, .simplex-steps-card #steps, .simplex-steps-card #steps > *{ min-width:0; max-width:100%; box-sizing:border-box; }
+.simplex-steps-card .simplex-table{ max-width:100%; }
 .big-m-objective{ background:#eff6ff; border-left:4px solid #2563eb; padding:10px; border-radius:6px; }
 .row-operations{ background:#fff7ed; border-left:4px solid #f59e0b; padding:10px; border-radius:6px; }
 .simplex-solution{ background:#ecfdf5; border-left:4px solid #16a34a; padding:12px; border-radius:8px; }
@@ -44,6 +46,10 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 .simplex-unbounded{ background:#fff7ed !important; border-left:4px solid #f59e0b; }
 .phase-heading{ background:#fefce8; border-left:4px solid #ca8a04; padding:10px; border-radius:6px; }
 .phase-card{ border-left:4px solid #7c3aed; }
+.free-variable-step{ background:#f5f3ff !important; border-left:4px solid #7c3aed; min-width:0; max-width:100%; box-sizing:border-box; }
+.free-variable-step h4{ margin-bottom:6px; }
+.free-variable-step p{ line-height:1.7; }
+.free-variable-equations, .free-variable-model{ max-width:100%; overflow-x:auto; }
 .pivot-cell{ color: #f97316; }
 
 .config-item select{ min-width:180px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; background:#fff; }
