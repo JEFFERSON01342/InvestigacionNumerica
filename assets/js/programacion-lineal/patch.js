@@ -14,6 +14,28 @@ function tableauColumnIndex(state, name){
   return variableIndex >= 0 ? variableIndex : state.vars.length + state.slackNames.indexOf(name);
 }
 
+function reduceObjectiveByBasicRows(state, metadata){
+  const operations = [];
+  state.tableau.forEach((row, rowIndex) => {
+    const basicColumn = tableauColumnIndex(state, row.basic);
+    const factor = tableauValue(state.objRow, basicColumn);
+    if(rationalIsZero(factor)) return;
+    const before = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata);
+    state.objRow.coeffs = state.objRow.coeffs.map((value, column) =>
+      rationalSubtract(value, rationalMultiply(factor, row.coeffs[column])));
+    state.objRow.slack = state.objRow.slack.map((value, column) =>
+      rationalSubtract(value, rationalMultiply(factor, row.slack[column])));
+    state.objRow.rhs = rationalSubtract(state.objRow.rhs, rationalMultiply(factor, row.rhs));
+    operations.push({
+      rowIndex,
+      factor,
+      before,
+      after: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata)
+    });
+  });
+  return operations;
+}
+
 // Regla de Bland: elegir la primera columna elegible y desempatar la razón
 // mínima por el índice de la variable básica para evitar ciclos.
 function findEnteringBland(state, excludeArtificial = false){
@@ -89,7 +111,13 @@ function simplexSteps(obj, constraints, method = 'big-m'){
     variableDomains: built.variableDomains,
     freeVariables: built.freeVariables
   };
-  const steps = [{ type: 'initial', state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata) }];
+  const preparationBefore = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata);
+  const preparationOperations = reduceObjectiveByBasicRows(state, metadata);
+  const steps = [{
+    type: 'initial',
+    state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, metadata),
+    preparation: { before: preparationBefore, operations: preparationOperations }
+  }];
 
   for(let iteration = 0; iteration < 200; iteration++){
     const enteringIndex = findEnteringBland(state);
@@ -116,15 +144,6 @@ function setObjectiveRow(state, variableCoeffs, slackCoeffs, rhs){
     rhs: rhs || rational(0),
     basic: 'Z'
   };
-  state.tableau.forEach(row => {
-    const basicIndex = state.vars.indexOf(row.basic);
-    const slackIndex = state.slackNames.indexOf(row.basic);
-    const factor = basicIndex >= 0 ? state.objRow.coeffs[basicIndex] : state.objRow.slack[slackIndex];
-    if(rationalIsZero(factor || 0)) return;
-    state.objRow.coeffs = state.objRow.coeffs.map((value, index) => rationalSubtract(value, rationalMultiply(factor, row.coeffs[index])));
-    state.objRow.slack = state.objRow.slack.map((value, index) => rationalSubtract(value, rationalMultiply(factor, row.slack[index])));
-    state.objRow.rhs = rationalSubtract(state.objRow.rhs, rationalMultiply(factor, row.rhs));
-  });
 }
 
 function appendSimplexPhaseSteps(state, metadata, steps, phase){
@@ -163,7 +182,15 @@ function twoPhaseSteps(obj, constraints){
     freeVariables: built.freeVariables
   };
   setObjectiveRow(state, {}, artificialCoeffs, rational(0));
-  const steps = [{ type: 'initial', phase: 1, state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase: 1}) }];
+  const phaseOneMetadata = {...metadata, phase: 1};
+  const phaseOneBefore = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, phaseOneMetadata);
+  const phaseOneOperations = reduceObjectiveByBasicRows(state, phaseOneMetadata);
+  const steps = [{
+    type: 'initial',
+    phase: 1,
+    state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, phaseOneMetadata),
+    preparation: { before: phaseOneBefore, operations: phaseOneOperations }
+  }];
   appendSimplexPhaseSteps(state, metadata, steps, 1);
   const phaseOneState = steps[steps.length - 1];
   const phaseOneTableau = phaseOneState.after || phaseOneState.state;
@@ -174,15 +201,20 @@ function twoPhaseSteps(obj, constraints){
   steps.push({
     type: 'phase',
     phase: 2,
-    state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase: 2})
+    state: null,
+    preparation: null
   });
   const objectiveCoeffs = Object.fromEntries(state.vars.map(variable => [
     variable,
     rationalNegate(built.objectiveVector[variable] || rational(0))
   ]));
   setObjectiveRow(state, objectiveCoeffs, {}, rational(0));
-  const phaseTwoInitial = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase: 2});
+  const phaseTwoMetadata = {...metadata, phase: 2};
+  const phaseTwoBefore = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, phaseTwoMetadata);
+  const phaseTwoOperations = reduceObjectiveByBasicRows(state, phaseTwoMetadata);
+  const phaseTwoInitial = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, phaseTwoMetadata);
   steps[steps.length - 1].state = phaseTwoInitial;
+  steps[steps.length - 1].preparation = { before: phaseTwoBefore, operations: phaseTwoOperations };
   appendSimplexPhaseSteps(state, metadata, steps, 2);
   return steps;
 }
@@ -463,6 +495,38 @@ function tableToLatexWithHighlight(state, highlight){
   return latex;
 }
 
+function renderObjectivePreparation(container, preparation, state, heading = 'Preparación de la fila objetivo'){
+  const section = document.createElement('article');
+  section.className = 'step-card objective-preparation';
+  section.innerHTML = `<h3>${heading}</h3>`;
+  const before = document.createElement('div');
+  before.className = 'simplex-table';
+  before.innerHTML = tableToLatexWithHighlight(preparation.before);
+  section.appendChild(before);
+
+  if(!preparation.operations.length){
+    const note = document.createElement('p');
+    note.textContent = 'La fila objetivo ya está en forma canónica respecto a las variables básicas; no se requieren operaciones antes de iterar.';
+    section.appendChild(note);
+  } else {
+    const objectiveScale = state.method === 'two-phase' && state.phase === 1 || state.objectiveSense === 'min' ? -1 : 1;
+    const objectiveName = state.method === 'two-phase' && state.phase === 1 ? '\\rho' : 'Z';
+    preparation.operations.forEach(operation => {
+      const displayFactor = rationalMultiply(operation.factor, objectiveScale);
+      const rowOperation = document.createElement('p');
+      rowOperation.innerHTML = `<strong>Eliminar el coeficiente de la variable básica ${simplexNameToLatex(operation.before.tableau[operation.rowIndex].basic)}:</strong><br>\\(${objectiveName} \\leftarrow ${objectiveName} - (${formatTableauNumber(displayFactor, state)})R_{${operation.rowIndex + 1}}\\)`;
+      section.appendChild(rowOperation);
+
+      const result = document.createElement('div');
+      result.className = 'simplex-table';
+      result.innerHTML = tableToLatexWithHighlight(operation.after);
+      section.appendChild(result);
+    });
+  }
+
+  container.appendChild(section);
+}
+
 function renderStepsLatex(steps, obj, constraints){
   const container = $id('steps');
   container.innerHTML = '';
@@ -470,7 +534,8 @@ function renderStepsLatex(steps, obj, constraints){
 
   const initial = steps[0].state;
   renderFreeVariableTransformation(container, initial, obj, constraints);
-  container.insertAdjacentHTML('beforeend', '<h3>Tabla inicial</h3>');
+  if(steps[0].preparation) renderObjectivePreparation(container, steps[0].preparation, initial);
+  container.insertAdjacentHTML('beforeend', '<h3>Tabla inicial para las iteraciones</h3>');
   if(initial.method !== 'two-phase' && initial.slackNames.some(name => /^A\d+$/.test(name))){
     container.insertAdjacentHTML('beforeend', `<p class="big-m-objective"><strong>Función penalizada:</strong> \\(Z = ${bigMObjectiveFormula(initial)}\\)</p>`);
   }
@@ -486,7 +551,8 @@ function renderStepsLatex(steps, obj, constraints){
     if(step.type === 'phase'){
       const phaseCard = document.createElement('article');
       phaseCard.className = 'step-card phase-card';
-      phaseCard.innerHTML = '<h3>Fase II</h3><p>Se eliminaron las variables artificiales de la función objetivo y se restaura la función objetivo original.</p>';
+      phaseCard.innerHTML = '<h3>Fase II</h3><p>Se eliminan las variables artificiales de la función objetivo y se restaura la función original. A continuación se prepara la fila objetivo para la base actual.</p>';
+      if(step.preparation) renderObjectivePreparation(phaseCard, step.preparation, step.state, 'Preparación de la fila objetivo de la Fase II');
       const phaseTable = document.createElement('div');
       phaseTable.className = 'simplex-table';
       phaseTable.innerHTML = tableToLatexWithHighlight(step.state);

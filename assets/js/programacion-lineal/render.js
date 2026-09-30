@@ -303,13 +303,6 @@ function buildTableau(obj, constraints){
     basic: 'Z'
   };
   artificialColumns.forEach(column => { objRow.slack[column] = bigM; });
-  tableau.forEach((row, rowIndex) => {
-    if(!artificialColumns.includes(slackNames.indexOf(row.basic))) return;
-    const factor = objRow.slack[slackNames.indexOf(row.basic)];
-    objRow.coeffs = objRow.coeffs.map((value, column) => rationalSubtract(value, rationalMultiply(factor, row.coeffs[column])));
-    objRow.slack = objRow.slack.map((value, column) => rationalSubtract(value, rationalMultiply(factor, row.slack[column])));
-    objRow.rhs = rationalSubtract(objRow.rhs, rationalMultiply(factor, row.rhs));
-  });
   return {
     vars,
     slackNames,
