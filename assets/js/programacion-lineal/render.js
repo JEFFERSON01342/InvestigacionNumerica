@@ -3,6 +3,79 @@
 
 function $id(id){ return document.getElementById(id); }
 
+class Rational {
+  constructor(numerator, denominator = 1n){
+    if(denominator === 0n) throw new Error('El denominador de una fracción no puede ser cero.');
+    const sign = denominator < 0n ? -1n : 1n;
+    const divisor = greatestCommonDivisor(numerator, denominator);
+    this.numerator = sign * numerator / divisor;
+    this.denominator = sign * denominator / divisor;
+  }
+  valueOf(){ return Number(this.numerator) / Number(this.denominator); }
+}
+
+function greatestCommonDivisor(left, right){
+  left = left < 0n ? -left : left;
+  right = right < 0n ? -right : right;
+  while(right){ [left, right] = [right, left % right]; }
+  return left || 1n;
+}
+
+function rational(value, denominator){
+  if(value instanceof Rational) return value;
+  if(denominator !== undefined){
+    const left = rational(value);
+    const right = rational(denominator);
+    return new Rational(left.numerator * right.denominator, left.denominator * right.numerator);
+  }
+  if(typeof value === 'bigint') return new Rational(value);
+  const text = String(value).trim();
+  const parts = text.split('/');
+  if(parts.length === 2) return rational(parts[0], parts[1]);
+  if(parts.length !== 1 || !text) throw new Error('Número inválido: ' + value);
+  const decimal = text.toLowerCase().match(/^([+-]?)(\d*)(?:\.(\d*))?(?:e([+-]?\d+))?$/);
+  if(!decimal || (!decimal[2] && !decimal[3])) throw new Error('Número inválido: ' + value);
+  const sign = decimal[1] === '-' ? -1n : 1n;
+  const fractionDigits = decimal[3] || '';
+  const exponent = Number(decimal[4] || 0) - fractionDigits.length;
+  let numerator = BigInt((decimal[2] || '0') + fractionDigits) * sign;
+  if(exponent >= 0) numerator *= 10n ** BigInt(exponent);
+  return exponent < 0 ? new Rational(numerator, 10n ** BigInt(-exponent)) : new Rational(numerator);
+}
+
+function rationalAdd(left, right){
+  left = rational(left); right = rational(right);
+  return new Rational(left.numerator * right.denominator + right.numerator * left.denominator, left.denominator * right.denominator);
+}
+
+function rationalSubtract(left, right){
+  left = rational(left); right = rational(right);
+  return new Rational(left.numerator * right.denominator - right.numerator * left.denominator, left.denominator * right.denominator);
+}
+
+function rationalMultiply(left, right){
+  left = rational(left); right = rational(right);
+  return new Rational(left.numerator * right.numerator, left.denominator * right.denominator);
+}
+
+function rationalDivide(left, right){
+  left = rational(left); right = rational(right);
+  return new Rational(left.numerator * right.denominator, left.denominator * right.numerator);
+}
+
+function rationalCompare(left, right){
+  left = rational(left); right = rational(right);
+  const difference = left.numerator * right.denominator - right.numerator * left.denominator;
+  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+}
+
+function rationalNegate(value){
+  value = rational(value);
+  return new Rational(-value.numerator, value.denominator);
+}
+
+function rationalIsZero(value){ return rational(value).numerator === 0n; }
+
 // MathJax se carga de forma asíncrona. Durante DOMContentLoaded solo existe
 // su objeto de configuración, por lo que typesetPromise aún puede no existir.
 function typesetMath(elements){
@@ -19,7 +92,10 @@ function typesetMath(elements){
 function normalizeMathExpression(raw){
   let text = (raw || '').toString().trim();
   text = text.replace(/\$\$/g, '').replace(/\$/g, '');
+  text = text.replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g, '($1/$2)');
+  text = text.replace(/\\(?:text|mathrm|mathbf|mathit|mathsf|mathtt)\s*\{([^{}]*)\}/g, '$1');
   text = text.replace(/\\left|\\right|\\text|\\mathrm|\\mathbf|\\mathit|\\mathsf|\\mathtt/g, ' ');
+  text = text.replace(/\\([{}])/g, '$1').replace(/[{}]/g, '');
   text = text.replace(/\\cdot|\\times/g, '*');
   text = text.replace(/\\leq|\\le/g, ' <= ');
   text = text.replace(/\\geq|\\ge/g, ' >= ');
@@ -48,27 +124,34 @@ function splitTerms(expr){
 }
 
 function addTermToCoeffs(coeffs, token){
-  const term = token.trim().replace(/\s+/g, '');
+  const original = token.trim().replace(/\s+/g, '').replace(/\*/g, '');
+  const sign = original.startsWith('-') ? -1 : 1;
+  const term = original.replace(/^[+-]/, '');
   if(!term) return;
-  const match = term.match(/^([+-]?\d*\.?\d*)([A-Za-z][A-Za-z0-9]*)?$/i);
+  const numericPattern = '(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:/(?:\\d+(?:\\.\\d*)?|\\.\\d+))?';
+  const match = term.match(new RegExp(`^(${numericPattern})?([A-Za-z][A-Za-z0-9]*)?$`, 'i'));
   if(!match) {
-    const spaced = term.match(/^([+-]?\d*\.?\d*)\s*([A-Za-z][A-Za-z0-9]*)$/i);
+    const spaced = term.match(new RegExp(`^([+-]?${numericPattern})?\\s*([A-Za-z][A-Za-z0-9]*)$`, 'i'));
     if(spaced){
-      const coefficient = parseFloat(spaced[1] || '1');
+      const coefficient = parseNumericInput(spaced[1] || '1');
       const variable = spaced[2].toLowerCase();
-      coeffs[variable] = (coeffs[variable] || 0) + coefficient;
+      coeffs[variable] = rationalAdd(coeffs[variable] || rational(0), rationalMultiply(sign, coefficient));
       return;
     }
     throw new Error('Término inválido: ' + token);
   }
-  let numPart = match[1];
-  if(numPart === '' || numPart === '+') numPart = '1';
-  if(numPart === '-') numPart = '-1';
+  const numPart = match[1] || '1';
   const variable = (match[2] || '').toLowerCase();
   if(!variable){
     return;
   }
-  coeffs[variable] = (coeffs[variable] || 0) + parseFloat(numPart);
+  coeffs[variable] = rationalAdd(coeffs[variable] || rational(0), rationalMultiply(sign, parseNumericInput(numPart)));
+}
+
+function parseNumericInput(value){
+  const parts = String(value).split('/');
+  if(parts.length > 2) throw new Error('Número inválido: ' + value);
+  return parts.length === 2 ? rational(parts[0], parts[1]) : rational(parts[0]);
 }
 
 function parseObjective(text){
@@ -105,8 +188,7 @@ function parseConstraints(linesText){
     const lhs = match[1].trim();
     const op = match[2].trim();
     const rhsText = match[3].trim();
-    const rhs = parseFloat(rhsText);
-    if(!Number.isFinite(rhs)) throw new Error('Lado derecho inválido en: ' + line);
+    const rhs = parseNumericInput(rhsText);
     const coeffs = {};
     for(const term of splitTerms(lhs)){
       addTermToCoeffs(coeffs, term);
@@ -124,6 +206,8 @@ function collectVars(obj, constraints){
 }
 
 function buildTableau(obj, constraints){
+  const zero = rational(0);
+  const one = rational(1);
   const originalVars = collectVars(obj, constraints);
   const variableDomains = obj.variableDomains || {};
   const defaultDomain = obj.variableDomain === 'free' ? 'free' : 'nonnegative';
@@ -155,28 +239,28 @@ function buildTableau(obj, constraints){
   let excessCount = 0;
   let artificialCount = 0;
   const normalizedConstraints = constraints.map(constraint => {
-    if(constraint.rhs >= 0) return {...constraint, coeffs: {...constraint.coeffs}};
+    if(rationalCompare(constraint.rhs, 0) >= 0) return {...constraint, coeffs: {...constraint.coeffs}};
     const reversed = { '<=': '>=', '>=': '<=', '=': '=' }[constraint.op];
     return {
       op: reversed,
-      rhs: -constraint.rhs,
-      coeffs: Object.fromEntries(Object.entries(constraint.coeffs).map(([variable, coefficient]) => [variable, -coefficient]))
+      rhs: rationalNegate(constraint.rhs),
+      coeffs: Object.fromEntries(Object.entries(constraint.coeffs).map(([variable, coefficient]) => [variable, rationalNegate(coefficient)]))
     };
   });
 
   normalizedConstraints.forEach((constraint, rowIndex) => {
-    const row = new Array(n).fill(0);
+    const row = new Array(n).fill(zero);
     originalVars.forEach(variable => {
-      const coefficient = constraint.coeffs[variable] || 0;
+      const coefficient = constraint.coeffs[variable] || zero;
       const mapping = variableMap[variable];
       if(mapping.positive !== null) row[mapping.positive] = coefficient;
-      if(mapping.negative !== null) row[mapping.negative] = -coefficient;
+      if(mapping.negative !== null) row[mapping.negative] = rationalNegate(coefficient);
     });
     let basic;
     if(constraint.op === '<='){
       basic = `S${++slackCount}`;
       slackNames.push(basic);
-      rows.push({ coeffs: row, extra: [{name: basic, value: 1}], rhs: constraint.rhs, basic });
+      rows.push({ coeffs: row, extra: [{name: basic, value: one}], rhs: constraint.rhs, basic });
     } else if(constraint.op === '>='){
       const excess = `E${++excessCount}`;
       const artificial = `A${++artificialCount}`;
@@ -184,7 +268,7 @@ function buildTableau(obj, constraints){
       artificialColumns.push(slackNames.length - 1);
       rows.push({
         coeffs: row,
-        extra: [{name: excess, value: -1}, {name: artificial, value: 1}],
+        extra: [{name: excess, value: rational(-1)}, {name: artificial, value: one}],
         rhs: constraint.rhs,
         basic: artificial
       });
@@ -192,39 +276,39 @@ function buildTableau(obj, constraints){
       const artificial = `A${++artificialCount}`;
       slackNames.push(artificial);
       artificialColumns.push(slackNames.length - 1);
-      rows.push({ coeffs: row, extra: [{name: artificial, value: 1}], rhs: constraint.rhs, basic: artificial });
+      rows.push({ coeffs: row, extra: [{name: artificial, value: one}], rhs: constraint.rhs, basic: artificial });
     }
   });
 
   const extraCount = slackNames.length;
   const tableau = rows.map(row => {
-    const slack = new Array(extraCount).fill(0);
+    const slack = new Array(extraCount).fill(zero);
     row.extra.forEach(item => { slack[slackNames.indexOf(item.name)] = item.value; });
     return { coeffs: row.coeffs.slice(), slack, rhs: row.rhs, basic: row.basic };
   });
 
   const objectiveDirection = obj.sense === 'min' ? -1 : 1;
-  const cvec = new Array(vars.length).fill(0);
+  const cvec = new Array(vars.length).fill(zero);
   originalVars.forEach(variable => {
-    const coefficient = objectiveDirection * (obj.coeffs[variable] || 0);
+    const coefficient = rationalMultiply(objectiveDirection, obj.coeffs[variable] || zero);
     const mapping = variableMap[variable];
     if(mapping.positive !== null) cvec[mapping.positive] = coefficient;
-    if(mapping.negative !== null) cvec[mapping.negative] = -coefficient;
+    if(mapping.negative !== null) cvec[mapping.negative] = rationalNegate(coefficient);
   });
-  const bigM = 1000000;
+  const bigM = rational(1000000);
   const objRow = {
-    coeffs: cvec.map(value => -value),
-    slack: new Array(extraCount).fill(0),
-    rhs: 0,
+    coeffs: cvec.map(rationalNegate),
+    slack: new Array(extraCount).fill(zero),
+    rhs: zero,
     basic: 'Z'
   };
   artificialColumns.forEach(column => { objRow.slack[column] = bigM; });
   tableau.forEach((row, rowIndex) => {
     if(!artificialColumns.includes(slackNames.indexOf(row.basic))) return;
     const factor = objRow.slack[slackNames.indexOf(row.basic)];
-    objRow.coeffs = objRow.coeffs.map((value, column) => value - factor * row.coeffs[column]);
-    objRow.slack = objRow.slack.map((value, column) => value - factor * row.slack[column]);
-    objRow.rhs -= factor * row.rhs;
+    objRow.coeffs = objRow.coeffs.map((value, column) => rationalSubtract(value, rationalMultiply(factor, row.coeffs[column])));
+    objRow.slack = objRow.slack.map((value, column) => rationalSubtract(value, rationalMultiply(factor, row.slack[column])));
+    objRow.rhs = rationalSubtract(objRow.rhs, rationalMultiply(factor, row.rhs));
   });
   return {
     vars,
@@ -248,23 +332,23 @@ function buildTableau(obj, constraints){
 
 function cloneTableauState(vars, slackNames, tableau, objRow, metadata = {}){ return { vars: vars.slice(), slackNames: slackNames.slice(), tableau: tableau.map(r=>({coeffs:r.coeffs.slice(), slack:r.slack.slice(), rhs:r.rhs, basic:r.basic})), objRow: {coeffs: objRow.coeffs.slice(), slack: objRow.slack.slice(), rhs: objRow.rhs, basic: objRow.basic}, ...metadata }; }
 
-function findEntering(objRow){ let minVal=0, idx=-1; for(let j=0;j<objRow.coeffs.length;j++){ const v=objRow.coeffs[j]; if(v<minVal){ minVal=v; idx=j; } } return idx; }
-function findLeaving(tableau, enteringIndex){ let bestRatio=Infinity, rowIdx=-1; for(let i=0;i<tableau.length;i++){ const aij=tableau[i].coeffs[enteringIndex]; if(aij>0){ const ratio=tableau[i].rhs/aij; if(ratio>=0 && ratio<bestRatio){ bestRatio=ratio; rowIdx=i; } } } return rowIdx; }
+function findEntering(objRow){ for(let j=0;j<objRow.coeffs.length;j++){ if(rationalCompare(objRow.coeffs[j], 0) < 0) return j; } return -1; }
+function findLeaving(tableau, enteringIndex){ let bestRatio=null, rowIdx=-1; for(let i=0;i<tableau.length;i++){ const aij=tableau[i].coeffs[enteringIndex]; if(rationalCompare(aij, 0)>0){ const ratio=rationalDivide(tableau[i].rhs,aij); if(rationalCompare(ratio, 0)>=0 && (bestRatio===null || rationalCompare(ratio,bestRatio)<0)){ bestRatio=ratio; rowIdx=i; } } } return rowIdx; }
 function pivotOn(state, enteringIndex, leavingRowIdx){ const T=state.tableau; const row=T[leavingRowIdx]; const pivot=row.coeffs[enteringIndex]; // prepare op info
   const opInfo = { enteringIndex, leavingRowIdx, pivot: pivot, normalizedRow: null, factors: [] };
   // normalize pivot row
-  const normCoeffs = row.coeffs.map(v=> v / pivot);
-  const normSlack = row.slack.map(v=> v / pivot);
-  const normRhs = row.rhs / pivot;
+  const normCoeffs = row.coeffs.map(v=> rationalDivide(v, pivot));
+  const normSlack = row.slack.map(v=> rationalDivide(v, pivot));
+  const normRhs = rationalDivide(row.rhs, pivot);
   opInfo.normalizedRow = { coeffs: normCoeffs.slice(), slack: normSlack.slice(), rhs: normRhs };
   // replace pivot row with normalized
   for(let j=0;j<row.coeffs.length;j++) row.coeffs[j]=normCoeffs[j];
   for(let j=0;j<row.slack.length;j++) row.slack[j]=normSlack[j];
   row.rhs = normRhs;
   // eliminate other rows
-  for(let i=0;i<T.length;i++){ if(i===leavingRowIdx) continue; const factor=T[i].coeffs[enteringIndex]; opInfo.factors[i]=factor; if(factor===0) continue; for(let j=0;j<T[i].coeffs.length;j++) T[i].coeffs[j]=T[i].coeffs[j]-factor*row.coeffs[j]; for(let j=0;j<T[i].slack.length;j++) T[i].slack[j]=T[i].slack[j]-factor*row.slack[j]; T[i].rhs=T[i].rhs-factor*row.rhs; }
+  for(let i=0;i<T.length;i++){ if(i===leavingRowIdx) continue; const factor=T[i].coeffs[enteringIndex]; opInfo.factors[i]=factor; if(rationalIsZero(factor)) continue; for(let j=0;j<T[i].coeffs.length;j++) T[i].coeffs[j]=rationalSubtract(T[i].coeffs[j],rationalMultiply(factor,row.coeffs[j])); for(let j=0;j<T[i].slack.length;j++) T[i].slack[j]=rationalSubtract(T[i].slack[j],rationalMultiply(factor,row.slack[j])); T[i].rhs=rationalSubtract(T[i].rhs,rationalMultiply(factor,row.rhs)); }
   // update objective row
-  const f=state.objRow.coeffs[enteringIndex]; if(f!==0){ for(let j=0;j<state.objRow.coeffs.length;j++) state.objRow.coeffs[j]=state.objRow.coeffs[j]-f*row.coeffs[j]; for(let j=0;j<state.objRow.slack.length;j++) state.objRow.slack[j]=state.objRow.slack[j]-f*row.slack[j]; state.objRow.rhs=state.objRow.rhs - f*row.rhs; }
+  const f=state.objRow.coeffs[enteringIndex]; if(!rationalIsZero(f)){ for(let j=0;j<state.objRow.coeffs.length;j++) state.objRow.coeffs[j]=rationalSubtract(state.objRow.coeffs[j],rationalMultiply(f,row.coeffs[j])); for(let j=0;j<state.objRow.slack.length;j++) state.objRow.slack[j]=rationalSubtract(state.objRow.slack[j],rationalMultiply(f,row.slack[j])); state.objRow.rhs=rationalSubtract(state.objRow.rhs,rationalMultiply(f,row.rhs)); }
   state.tableau[leavingRowIdx].basic = state.vars[enteringIndex];
   opInfo.newBasic = state.tableau[leavingRowIdx].basic;
   return opInfo;
@@ -291,7 +375,51 @@ function simplexSteps(obj, constraints){ const built=buildTableau(obj,constraint
 }
 
 // --- Rendering helpers (LaTeX via MathJax) ---
-function formatNum(x){ return Math.abs(x) < 1e-9 ? '0' : (+x.toFixed(6)).toString(); }
+function formatNum(value){
+  if(value instanceof Rational){
+    if(value.numerator === 0n) return '0';
+    const sign = value.numerator < 0n ? '-' : '';
+    const numerator = value.numerator < 0n ? -value.numerator : value.numerator;
+    return value.denominator === 1n
+      ? `${sign}${numerator}`
+      : `${sign}\\frac{${numerator}}{${value.denominator}}`;
+  }
+  if(!Number.isFinite(value)) return String(value);
+  if(Math.abs(value) < 1e-9) return '0';
+  const sign = value < 0 ? '-' : '';
+  let remainder = Math.abs(value);
+  let previousNumerator = 0, numerator = 1;
+  let previousDenominator = 1, denominator = 0;
+  let bestNumerator = Math.round(remainder), bestDenominator = 1;
+
+  for(let iteration = 0; iteration < 32; iteration++){
+    const whole = Math.floor(remainder);
+    const nextNumerator = whole * numerator + previousNumerator;
+    const nextDenominator = whole * denominator + previousDenominator;
+    if(nextDenominator > 1000000) break;
+    previousNumerator = numerator;
+    numerator = nextNumerator;
+    previousDenominator = denominator;
+    denominator = nextDenominator;
+    bestNumerator = numerator;
+    bestDenominator = denominator;
+    if(Math.abs(numerator / denominator - Math.abs(value)) < 1e-10) break;
+    const fractionalPart = remainder - whole;
+    if(fractionalPart < 1e-14) break;
+    remainder = 1 / fractionalPart;
+  }
+
+  const formattedNumerator = sign + bestNumerator;
+  return bestDenominator === 1
+    ? formattedNumerator
+    : `${sign}\\frac{${bestNumerator}}{${bestDenominator}}`;
+}
+
+function formatDecimal(value){
+  const decimal = Number(value);
+  if(Math.abs(decimal) < 1e-9) return '0';
+  return String(Number(decimal.toFixed(8)));
+}
 function tableToLatex(st){ const nvars=st.vars.length, mslack=st.slackNames.length; const cols = ['c'].concat(Array(nvars).fill('r')).concat(Array(mslack).fill('r')).concat(['r']); const colSpec=cols.join(''); let s='\\[\\begin{array}{'+colSpec+'}'; const headers=['\\mathrm{BV}'].concat(st.vars.map(v=>`$${v}$`)).concat(st.slackNames.map(sn=>`$${sn}$`)).concat(['$\\mathrm{RHS}$']); s+=headers.join(' & ') + ' \\\\ '; for(let i=0;i<st.tableau.length;i++){ const row=st.tableau[i]; const cells=[]; cells.push(`$${row.basic}$`); for(let j=0;j<row.coeffs.length;j++) cells.push(formatNum(row.coeffs[j])); for(let j=0;j<row.slack.length;j++) cells.push(formatNum(row.slack[j])); cells.push(formatNum(row.rhs)); s+=cells.join(' & ') + ' \\\\ \n'; } const or=st.objRow; const orcells=[]; orcells.push(`$${or.basic}$`); for(let j=0;j<or.coeffs.length;j++) orcells.push(formatNum(or.coeffs[j])); for(let j=0;j<or.slack.length;j++) orcells.push(formatNum(or.slack[j])); orcells.push(formatNum(or.rhs)); s+='\\\hline ' + orcells.join(' & ') + ' \\\\ \n'; s+='\\end{array}\\]'; return s; }
 
 // Convert LaTeX input to ASCII for parser
@@ -357,7 +485,7 @@ function updateVariableDomainControls(){
 
 function isStandardSimplexModel(constraints){
   return constraints.every(constraint => {
-    const operator = constraint.rhs < 0
+    const operator = rationalCompare(constraint.rhs, 0) < 0
       ? {'<=': '>=', '>=': '<=', '=': '='}[constraint.op]
       : constraint.op;
     return operator === '<=';
@@ -405,12 +533,12 @@ function computeSolutionFromTable(st){
     const negativeRow = negativeColumn && st.tableau.find(item => item.basic === negativeColumn);
     res.push({
       var: variable,
-      value: (positiveRow ? positiveRow.rhs : 0) - (negativeRow ? negativeRow.rhs : 0)
+      value: rationalSubtract(positiveRow ? positiveRow.rhs : rational(0), negativeRow ? negativeRow.rhs : rational(0))
     });
   }
   const direction = st.objectiveDirection || 1;
-  const infeasible = st.tableau.some(row => /^A\d+$/.test(row.basic) && Math.abs(row.rhs) > 1e-7);
-  return {vars: res, Z: st.objRow.rhs * direction, infeasible};
+  const infeasible = st.tableau.some(row => /^A\d+$/.test(row.basic) && !rationalIsZero(row.rhs));
+  return {vars: res, Z: rationalMultiply(st.objRow.rhs, direction), infeasible};
 }
 
 // wire buttons to math-field inputs
@@ -445,7 +573,7 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       const implicitNonNegative = parsedConstraints.filter(constraint =>
         typeof isImplicitNonNegativity === 'function' &&
         isImplicitNonNegativity(constraint) &&
-        variableDomains[Object.keys(constraint.coeffs).find(variable => Math.abs(constraint.coeffs[variable]) > 1e-12)] === 'nonnegative'
+        variableDomains[Object.keys(constraint.coeffs).find(variable => !rationalIsZero(constraint.coeffs[variable]))] === 'nonnegative'
       );
       const implicitConstraints = new Set(implicitNonNegative);
       const cons = parsedConstraints.filter(constraint => !implicitConstraints.has(constraint));

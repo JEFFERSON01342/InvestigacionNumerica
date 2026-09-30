@@ -22,26 +22,22 @@ function findEnteringBland(state, excludeArtificial = false){
   for(let column = 0; column < values.length; column++){
     const name = tableauColumnName(state, column);
     if(basicVariables.has(name) || (excludeArtificial && /^A\d+$/.test(name))) continue;
-    if(values[column] < -1e-10) return column;
+    if(rationalCompare(values[column], 0) < 0) return column;
   }
   return -1;
 }
 
 function findLeaving(tableau, enteringIndex, state){
-  let bestRatio = Infinity, rowIndex = -1, bestBasicIndex = Infinity;
+  let bestRatio = null, rowIndex = -1, bestBasicIndex = Infinity;
   tableau.forEach((row, index) => {
     const coefficient = tableauValue(row, enteringIndex);
-    if(coefficient <= 1e-12) return;
-    const ratio = row.rhs / coefficient;
-    if(ratio < -1e-10) return;
-    const nonnegativeRatio = Math.max(0, ratio);
+    if(rationalCompare(coefficient, 0) <= 0) return;
+    const ratio = rationalDivide(row.rhs, coefficient);
+    if(rationalCompare(ratio, 0) < 0) return;
     const basicIndex = state ? tableauColumnIndex(state, row.basic) : index;
-    const tolerance = Number.isFinite(bestRatio)
-      ? 1e-10 * Math.max(1, Math.abs(nonnegativeRatio), Math.abs(bestRatio))
-      : 0;
-    if(!Number.isFinite(bestRatio) || nonnegativeRatio < bestRatio - tolerance ||
-      (Math.abs(nonnegativeRatio - bestRatio) <= tolerance && basicIndex < bestBasicIndex)){
-      bestRatio = nonnegativeRatio;
+    const comparison = bestRatio === null ? -1 : rationalCompare(ratio, bestRatio);
+    if(bestRatio === null || comparison < 0 || (comparison === 0 && basicIndex < bestBasicIndex)){
+      bestRatio = ratio;
       bestBasicIndex = basicIndex;
       rowIndex = index;
     }
@@ -54,26 +50,26 @@ function pivotOn(state, enteringIndex, leavingRowIdx){
   const pivot = tableauValue(pivotRow, enteringIndex);
   const operation = { enteringIndex, leavingRowIdx, pivot, factors: [] };
 
-  pivotRow.coeffs = pivotRow.coeffs.map(value => value / pivot);
-  pivotRow.slack = pivotRow.slack.map(value => value / pivot);
-  pivotRow.rhs /= pivot;
+  pivotRow.coeffs = pivotRow.coeffs.map(value => rationalDivide(value, pivot));
+  pivotRow.slack = pivotRow.slack.map(value => rationalDivide(value, pivot));
+  pivotRow.rhs = rationalDivide(pivotRow.rhs, pivot);
 
   state.tableau.forEach((row, index) => {
     if(index === leavingRowIdx) return;
     const factor = tableauValue(row, enteringIndex);
     operation.factors[index] = factor;
-    if(Math.abs(factor) < 1e-12) return;
-    row.coeffs = row.coeffs.map((value, column) => value - factor * pivotRow.coeffs[column]);
-    row.slack = row.slack.map((value, column) => value - factor * pivotRow.slack[column]);
-    row.rhs -= factor * pivotRow.rhs;
+    if(rationalIsZero(factor)) return;
+    row.coeffs = row.coeffs.map((value, column) => rationalSubtract(value, rationalMultiply(factor, pivotRow.coeffs[column])));
+    row.slack = row.slack.map((value, column) => rationalSubtract(value, rationalMultiply(factor, pivotRow.slack[column])));
+    row.rhs = rationalSubtract(row.rhs, rationalMultiply(factor, pivotRow.rhs));
   });
 
   const objectiveFactor = tableauValue(state.objRow, enteringIndex);
   operation.objectiveFactor = objectiveFactor;
-  if(Math.abs(objectiveFactor) >= 1e-12){
-    state.objRow.coeffs = state.objRow.coeffs.map((value, column) => value - objectiveFactor * pivotRow.coeffs[column]);
-    state.objRow.slack = state.objRow.slack.map((value, column) => value - objectiveFactor * pivotRow.slack[column]);
-    state.objRow.rhs -= objectiveFactor * pivotRow.rhs;
+  if(!rationalIsZero(objectiveFactor)){
+    state.objRow.coeffs = state.objRow.coeffs.map((value, column) => rationalSubtract(value, rationalMultiply(objectiveFactor, pivotRow.coeffs[column])));
+    state.objRow.slack = state.objRow.slack.map((value, column) => rationalSubtract(value, rationalMultiply(objectiveFactor, pivotRow.slack[column])));
+    state.objRow.rhs = rationalSubtract(state.objRow.rhs, rationalMultiply(objectiveFactor, pivotRow.rhs));
   }
   pivotRow.basic = tableauColumnName(state, enteringIndex);
   return operation;
@@ -85,7 +81,7 @@ function simplexSteps(obj, constraints, method = 'big-m'){
   const metadata = {
     method,
     objectiveDirection: built.objectiveDirection,
-    bigM: built.bigM,
+    bigM: method === 'big-m' ? built.bigM : null,
     objectiveSense: built.objectiveSense,
     objectiveCoeffs: built.objectiveCoeffs,
     originalVars: built.originalVars,
@@ -115,19 +111,19 @@ function simplexSteps(obj, constraints, method = 'big-m'){
 
 function setObjectiveRow(state, variableCoeffs, slackCoeffs, rhs){
   state.objRow = {
-    coeffs: state.vars.map(variable => variableCoeffs[variable] || 0),
-    slack: state.slackNames.map(name => slackCoeffs[name] || 0),
-    rhs: rhs || 0,
+    coeffs: state.vars.map(variable => variableCoeffs[variable] || rational(0)),
+    slack: state.slackNames.map(name => slackCoeffs[name] || rational(0)),
+    rhs: rhs || rational(0),
     basic: 'Z'
   };
   state.tableau.forEach(row => {
     const basicIndex = state.vars.indexOf(row.basic);
     const slackIndex = state.slackNames.indexOf(row.basic);
     const factor = basicIndex >= 0 ? state.objRow.coeffs[basicIndex] : state.objRow.slack[slackIndex];
-    if(Math.abs(factor || 0) < 1e-12) return;
-    state.objRow.coeffs = state.objRow.coeffs.map((value, index) => value - factor * row.coeffs[index]);
-    state.objRow.slack = state.objRow.slack.map((value, index) => value - factor * row.slack[index]);
-    state.objRow.rhs -= factor * row.rhs;
+    if(rationalIsZero(factor || 0)) return;
+    state.objRow.coeffs = state.objRow.coeffs.map((value, index) => rationalSubtract(value, rationalMultiply(factor, row.coeffs[index])));
+    state.objRow.slack = state.objRow.slack.map((value, index) => rationalSubtract(value, rationalMultiply(factor, row.slack[index])));
+    state.objRow.rhs = rationalSubtract(state.objRow.rhs, rationalMultiply(factor, row.rhs));
   });
 }
 
@@ -155,7 +151,7 @@ function twoPhaseSteps(obj, constraints){
   const built = buildTableau(obj, constraints);
   const state = { vars: built.vars, slackNames: built.slackNames, tableau: built.tableau, objRow: built.objRow };
   const artificialNames = state.slackNames.filter(name => /^A\d+$/.test(name));
-  const artificialCoeffs = Object.fromEntries(artificialNames.map(name => [name, 1]));
+  const artificialCoeffs = Object.fromEntries(artificialNames.map(name => [name, rational(1)]));
   const metadata = {
     method: 'two-phase',
     objectiveDirection: built.objectiveDirection,
@@ -166,12 +162,12 @@ function twoPhaseSteps(obj, constraints){
     variableDomains: built.variableDomains,
     freeVariables: built.freeVariables
   };
-  setObjectiveRow(state, {}, artificialCoeffs, 0);
+  setObjectiveRow(state, {}, artificialCoeffs, rational(0));
   const steps = [{ type: 'initial', phase: 1, state: cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase: 1}) }];
   appendSimplexPhaseSteps(state, metadata, steps, 1);
   const phaseOneState = steps[steps.length - 1];
   const phaseOneTableau = phaseOneState.after || phaseOneState.state;
-  if(phaseOneState.type === 'unbounded' || phaseOneTableau.objRow.rhs < -1e-7){
+  if(phaseOneState.type === 'unbounded' || rationalCompare(phaseOneTableau.objRow.rhs, 0) < 0){
     return steps;
   }
 
@@ -182,9 +178,9 @@ function twoPhaseSteps(obj, constraints){
   });
   const objectiveCoeffs = Object.fromEntries(state.vars.map(variable => [
     variable,
-    -(built.objectiveVector[variable] || 0)
+    rationalNegate(built.objectiveVector[variable] || rational(0))
   ]));
-  setObjectiveRow(state, objectiveCoeffs, {}, 0);
+  setObjectiveRow(state, objectiveCoeffs, {}, rational(0));
   const phaseTwoInitial = cloneTableauState(state.vars, state.slackNames, state.tableau, state.objRow, {...metadata, phase: 2});
   steps[steps.length - 1].state = phaseTwoInitial;
   appendSimplexPhaseSteps(state, metadata, steps, 2);
@@ -197,14 +193,14 @@ function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
   if(!constraints.length) issues.push('Debes añadir al menos una restricción.');
   constraints.forEach((constraint, index) => {
     if(!['<=', '>=', '='].includes(constraint.op)) issues.push(`R${index + 1} usa un operador no válido.`);
-    if(!Number.isFinite(constraint.rhs)) issues.push(`R${index + 1} tiene un lado derecho inválido.`);
+    if(!(constraint.rhs instanceof Rational) && !Number.isFinite(constraint.rhs)) issues.push(`R${index + 1} tiene un lado derecho inválido.`);
   });
   const variables = collectVars(obj, constraints);
   if(!variables.length) issues.push('La función objetivo no contiene variables.');
   const direction = sense === 'min' ? -1 : 1;
   variables.forEach(variable => {
-    const improves = direction * (obj.coeffs[variable] || 0) > 1e-12;
-    const limitsVariable = constraints.some(constraint => (constraint.coeffs[variable] || 0) > 1e-12);
+    const improves = rationalCompare(rationalMultiply(direction, obj.coeffs[variable] || 0), 0) > 0;
+    const limitsVariable = constraints.some(constraint => rationalCompare(constraint.coeffs[variable] || 0, 0) > 0);
     if(improves && !limitsVariable) notes.push(`${variable} puede mejorar Z sin un límite superior aparente; el simplex lo comprobará mostrando sus iteraciones.`);
   });
   if(!issues.length){
@@ -221,9 +217,9 @@ function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
 }
 
 function isImplicitNonNegativity(constraint){
-  if(constraint.op !== '>=' || Math.abs(constraint.rhs) > 1e-12) return false;
-  const terms = Object.entries(constraint.coeffs).filter(([, coefficient]) => Math.abs(coefficient) > 1e-12);
-  return terms.length === 1 && Math.abs(terms[0][1] - 1) < 1e-12;
+  if(constraint.op !== '>=' || !rationalIsZero(constraint.rhs)) return false;
+  const terms = Object.entries(constraint.coeffs).filter(([, coefficient]) => !rationalIsZero(coefficient));
+  return terms.length === 1 && rationalCompare(terms[0][1], 1) === 0;
 }
 
 function renderPreflightReport(report){
@@ -237,24 +233,28 @@ function renderPreflightReport(report){
 function renderResultVerification(solution, obj, constraints){
   const target = $id('verification');
   if(!target) return;
+  const zero = rational(0);
   const values = Object.fromEntries(solution.vars.map(item => [item.var, item.value]));
   const checks = constraints.map((constraint, index) => {
-    const lhs = Object.entries(constraint.coeffs).reduce((total, [variable, coefficient]) => total + coefficient * (values[variable] || 0), 0);
-    const valid = constraint.op === '<=' ? lhs <= constraint.rhs + 1e-7 : constraint.op === '>=' ? lhs >= constraint.rhs - 1e-7 : Math.abs(lhs - constraint.rhs) <= 1e-7;
+    const lhs = Object.entries(constraint.coeffs).reduce((total, [variable, coefficient]) =>
+      rationalAdd(total, rationalMultiply(coefficient, values[variable] || zero)), zero);
+    const comparison = rationalCompare(lhs, constraint.rhs);
+    const valid = constraint.op === '<=' ? comparison <= 0 : constraint.op === '>=' ? comparison >= 0 : comparison === 0;
     const substitution = Object.entries(constraint.coeffs)
-      .filter(([, coefficient]) => Math.abs(coefficient) > 1e-12)
+      .filter(([, coefficient]) => !rationalIsZero(coefficient))
       .map(([variable, coefficient]) => `${formatNum(coefficient)}(${formatNum(values[variable] || 0)})`)
       .join(' + ')
-      .replace(/\+\s-\(/g, '- (');
+      .replace(/\+\s-(?=\\frac|\d|\()/g, '- ');
     return { index, lhs, valid, substitution };
   });
-  const z = Object.entries(obj.coeffs).reduce((total, [variable, coefficient]) => total + coefficient * (values[variable] || 0), 0);
+  const z = Object.entries(obj.coeffs).reduce((total, [variable, coefficient]) =>
+    rationalAdd(total, rationalMultiply(coefficient, values[variable] || zero)), zero);
   const domainChecks = solution.vars.map(item => {
     const domain = obj.variableDomains?.[item.var] || 'nonnegative';
-    if(domain === 'nonpositive') return item.value <= 1e-7;
-    if(domain === 'zero') return Math.abs(item.value) <= 1e-7;
+    if(domain === 'nonpositive') return rationalCompare(item.value, 0) <= 0;
+    if(domain === 'zero') return rationalIsZero(item.value);
     if(domain === 'free') return true;
-    return item.value >= -1e-7;
+    return rationalCompare(item.value, 0) >= 0;
   });
   const valid = domainChecks.every(Boolean) && checks.every(check => check.valid);
   target.className = `verification-box ${valid ? 'ok' : 'error'}`;
@@ -270,10 +270,10 @@ function renderResultVerification(solution, obj, constraints){
     return `<li>\\(${item.var} = ${formatNum(item.value)}\\), ${symbol} \\;\\Rightarrow\\; ${signCheck ? '\\text{cumple}' : '\\text{no cumple}'}</li>`;
   }).join('');
   const objectiveSubstitution = Object.entries(obj.coeffs)
-    .filter(([, coefficient]) => Math.abs(coefficient) > 1e-12)
+    .filter(([, coefficient]) => !rationalIsZero(coefficient))
     .map(([variable, coefficient]) => `${formatNum(coefficient)}(${formatNum(values[variable] || 0)})`)
     .join(' + ')
-    .replace(/\+\s-\(/g, '- (');
+    .replace(/\+\s-(?=\\frac|\d|\()/g, '- ');
   target.innerHTML = `<strong>${valid ? 'Solución verificada.' : 'La solución no pasó la verificación.'}</strong>
     <p><strong>Dominio:</strong> ${domainText || 'sin variables'}.</p>
     <ul>${variableChecks}</ul>
@@ -303,21 +303,28 @@ function renderInfeasibleVerification(){
 
 function formatBigM(value, state){
   const bigM = state.bigM;
-  if(!bigM || !Number.isFinite(value)) return formatNum(value);
-  const mCoefficient = Math.round(value / bigM);
-  const constant = value - mCoefficient * bigM;
-  if(Math.abs(mCoefficient) < 1e-9) return formatNum(constant);
+  if(!bigM) return formatNum(value);
+  const ratio = rationalDivide(value, bigM);
+  let mCoefficient = ratio.numerator / ratio.denominator;
+  const remainder = ratio.numerator % ratio.denominator;
+  if((remainder < 0n ? -remainder : remainder) * 2n >= ratio.denominator){
+    mCoefficient += ratio.numerator < 0n ? -1n : 1n;
+  }
+  const constant = rationalSubtract(value, rationalMultiply(mCoefficient, bigM));
+  if(mCoefficient === 0n) return formatNum(constant);
   const parts = [];
-  if(mCoefficient === 1) parts.push('M');
-  else if(mCoefficient === -1) parts.push('-M');
+  if(mCoefficient === 1n) parts.push('M');
+  else if(mCoefficient === -1n) parts.push('-M');
   else parts.push(`${formatNum(mCoefficient)}M`);
-  if(Math.abs(constant) >= 1e-7) parts.push(constant > 0 ? `+${formatNum(constant)}` : formatNum(constant));
+  if(!rationalIsZero(constant)) parts.push(rationalCompare(constant, 0) > 0 ? `+${formatNum(constant)}` : formatNum(constant));
   return parts.join('');
 }
 
 function bigMObjectiveFormula(state){
   const terms = Object.entries(state.objectiveCoeffs || {}).map(([variable, coefficient]) => {
-    const signed = coefficient < 0 ? `- ${formatNum(Math.abs(coefficient))}${variable}` : `+ ${formatNum(coefficient)}${variable}`;
+    const negative = rationalCompare(coefficient, 0) < 0;
+    const magnitude = negative ? rationalNegate(coefficient) : coefficient;
+    const signed = negative ? `- ${formatNum(magnitude)}${variable}` : `+ ${formatNum(coefficient)}${variable}`;
     return signed;
   });
   const artificialNames = state.slackNames.filter(name => /^A\d+$/.test(name));
@@ -335,12 +342,12 @@ function simplexNameToLatex(name){
 }
 
 function linearCombinationToLatex(terms){
-  const nonzeroTerms = terms.filter(term => Math.abs(term.coefficient) > 1e-12);
+  const nonzeroTerms = terms.filter(term => !rationalIsZero(term.coefficient));
   if(!nonzeroTerms.length) return '0';
   return nonzeroTerms.map((term, index) => {
-    const negative = term.coefficient < 0;
-    const magnitude = Math.abs(term.coefficient);
-    const coefficient = Math.abs(magnitude - 1) < 1e-12 ? '' : formatNum(magnitude);
+    const negative = rationalCompare(term.coefficient, 0) < 0;
+    const magnitude = negative ? rationalNegate(term.coefficient) : term.coefficient;
+    const coefficient = rationalCompare(magnitude, 1) === 0 ? '' : formatNum(magnitude);
     const value = `${coefficient}${simplexNameToLatex(term.variable)}`;
     if(index === 0) return negative ? `-${value}` : value;
     return negative ? ` - ${value}` : ` + ${value}`;
@@ -357,7 +364,7 @@ function transformedExpressionToLatex(coefficients, state){
       return;
     }
     if(mapping.positive !== null) terms.push({coefficient, variable: state.vars[mapping.positive]});
-    if(mapping.negative !== null) terms.push({coefficient: -coefficient, variable: state.vars[mapping.negative]});
+    if(mapping.negative !== null) terms.push({coefficient: rationalNegate(coefficient), variable: state.vars[mapping.negative]});
   });
   return linearCombinationToLatex(terms);
 }
@@ -415,21 +422,7 @@ function orderedSlackValues(values, indexes){
 }
 
 function formatTableauNumber(value, state){
-  if(state.bigM) return formatBigM(value, state);
-  if(Math.abs(value) < 1e-9) return '0';
-  for(let denominator = 2; denominator <= 100; denominator++){
-    const numerator = Math.round(value * denominator);
-    if(Math.abs(value - numerator / denominator) >= 1e-8) continue;
-    const greatestCommonDivisor = (left, right) => right ? greatestCommonDivisor(right, left % right) : left;
-    const divisor = greatestCommonDivisor(Math.abs(numerator), denominator);
-    const reducedNumerator = Math.abs(numerator) / divisor;
-    const reducedDenominator = denominator / divisor;
-    const sign = numerator < 0 ? '-' : '';
-    return reducedDenominator === 1
-      ? `${sign}${reducedNumerator}`
-      : `${sign}\\frac{${reducedNumerator}}{${reducedDenominator}}`;
-  }
-  return formatNum(value);
+  return state.bigM ? formatBigM(value, state) : formatNum(value);
 }
 
 function displayTableauColumnIndex(state, columnIndex, slackIndexes){
@@ -450,7 +443,7 @@ function tableToLatexWithHighlight(state, highlight){
 
   state.tableau.forEach((row, rowIndex) => {
     const values = [simplexNameToLatex(row.basic), 0, ...row.coeffs, ...orderedSlackValues(row.slack, slackIndexes), row.rhs].map((value, columnIndex) => {
-      const formatted = typeof value === 'number' ? formatTableauNumber(value, state) : value;
+      const formatted = typeof value === 'number' || value instanceof Rational ? formatTableauNumber(value, state) : value;
       const pivotColumn = highlight
         ? displayTableauColumnIndex(state, highlight.enteringIndex, slackIndexes)
         : -1;
@@ -462,11 +455,11 @@ function tableToLatexWithHighlight(state, highlight){
   const objectiveValues = [
     objectiveName,
     1,
-    ...state.objRow.coeffs.map(value => value * objectiveScale),
-    ...orderedSlackValues(state.objRow.slack, slackIndexes).map(value => value * objectiveScale),
-    state.objRow.rhs * objectiveScale
+    ...state.objRow.coeffs.map(value => rationalMultiply(value, objectiveScale)),
+    ...orderedSlackValues(state.objRow.slack, slackIndexes).map(value => rationalMultiply(value, objectiveScale)),
+    rationalMultiply(state.objRow.rhs, objectiveScale)
   ];
-  latex += `\\hline ${objectiveValues.map(value => typeof value === 'number' ? formatTableauNumber(value, state) : value).join(' & ')} \\\\ \\end{array}\\]`;
+  latex += `\\hline ${objectiveValues.map(value => typeof value === 'number' || value instanceof Rational ? formatTableauNumber(value, state) : value).join(' & ')} \\\\ \\end{array}\\]`;
   return latex;
 }
 
@@ -534,9 +527,9 @@ function renderStepsLatex(steps, obj, constraints){
 
     let operations = `\\(R_{${operation.leavingRowIdx + 1}} \\leftarrow \\frac{R_{${operation.leavingRowIdx + 1}}}{${formatNum(operation.pivot)}}\\)`;
     operation.factors.forEach((factor, rowIndex) => {
-      if(Math.abs(factor || 0) > 1e-12) operations += `<br>\\(R_{${rowIndex + 1}} \\leftarrow R_{${rowIndex + 1}} - (${formatNum(factor)})R_{${operation.leavingRowIdx + 1}}\\)`;
+      if(!rationalIsZero(factor || 0)) operations += `<br>\\(R_{${rowIndex + 1}} \\leftarrow R_{${rowIndex + 1}} - (${formatNum(factor)})R_{${operation.leavingRowIdx + 1}}\\)`;
     });
-    if(Math.abs(operation.objectiveFactor || 0) > 1e-12) operations += `<br>\\(Z \\leftarrow Z - (${formatNum(operation.objectiveFactor)})R_{${operation.leavingRowIdx + 1}}\\)`;
+    if(!rationalIsZero(operation.objectiveFactor || 0)) operations += `<br>\\(Z \\leftarrow Z - (${formatNum(operation.objectiveFactor)})R_{${operation.leavingRowIdx + 1}}\\)`;
     const operationsEl = document.createElement('p');
     operationsEl.className = 'row-operations';
     operationsEl.innerHTML = `<strong>Operaciones para hacer cero la columna ${enteringLatex}:</strong><br>${operations}`;
@@ -558,7 +551,7 @@ function renderStepsLatex(steps, obj, constraints){
   solutionEl.className = solution.infeasible ? 'simplex-solution simplex-unbounded' : 'simplex-solution';
   solutionEl.innerHTML = solution.infeasible
     ? '<h3>Modelo infactible</h3><p>La Fase I/penalización conserva una variable artificial positiva. No se puede aceptar esta tabla como solución del problema original.</p>'
-    : `<h3>Solución óptima</h3>${solution.vars.map(item => `\\(${item.var} = ${formatNum(item.value)}\\)`).join(', ')}<br>\\(Z = ${formatNum(solution.Z)}\\)`;
+    : `<h3>Solución óptima</h3><p><strong>Fracción (decimal):</strong> ${solution.vars.map(item => `\\(${item.var} = ${formatNum(item.value)}\\;(${formatDecimal(item.value)})\\)`).join(', ')}<br>\\(Z = ${formatNum(solution.Z)}\\;(${formatDecimal(solution.Z)})\\)</p>`;
   container.appendChild(solutionEl);
   typesetMath([container]);
 }
