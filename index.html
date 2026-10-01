@@ -14,7 +14,7 @@
             console.warn('No se pudo recuperar la preferencia de tema:', error);
         }
     </script>
-    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-3">
+    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-4">
     <link rel="icon" type="image/png" href="assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -69,7 +69,7 @@
             </li>
             <li>
                 <span class="onboarding-step-number">3</span>
-                <div><strong>Configura variables y método</strong><p>Define el signo de cada variable. El método gráfico requiere exactamente dos variables; para los demás modelos puedes usar Símplex, Gran M o Dos Fases según las restricciones.</p></div>
+                <div><strong>Configura variables y método</strong><p>Define el signo de cada variable. El método gráfico requiere exactamente dos variables; para los demás modelos puedes usar Símplex, Símplex revisado, Gran M o Dos Fases según las restricciones.</p></div>
             </li>
             <li>
                 <span class="onboarding-step-number">4</span>
@@ -115,7 +115,7 @@
     </div>
     <div class="hero-text">
         <h2>Programación Lineal</h2>
-        <p>Métodos Símplex, Gran M, Dos Fases y método gráfico con entrada LaTeX.</p>
+        <p>Métodos Símplex, Símplex revisado, Gran M, Dos Fases y método gráfico con entrada LaTeX.</p>
     </div>
 </header>
 
@@ -142,6 +142,7 @@
                         <label for="method-pl">Método</label>
                         <select id="method-pl">
                             <option value="simplex" selected>Símplex estándar</option>
+                            <option value="revised">Símplex revisado</option>
                             <option value="big-m">Gran M</option>
                             <option value="two-phase">Dos Fases</option>
                             <option value="graphical">Método gráfico (2 variables)</option>
@@ -176,7 +177,7 @@
                     <div class="funcion-label">Z =</div>
                     <math-field id="objective-field"></math-field>
                 </div>
-                <p>Las fracciones se calculan exactamente y las tablas se muestran en fracciones. La solución final también incluye su aproximación decimal.</p>
+                <p>Las fracciones se calculan exactamente y las tablas y matrices del Símplex revisado se muestran en fracciones. La solución final también incluye su aproximación decimal.</p>
                 <div id="preview-objective" class="preview-box">$$Z=$$</div>
             </div>
 
@@ -235,8 +236,8 @@
 
 </main>
 
-<script src="assets/js/programacion-lineal/render.js?v=20261001-3"></script>
-<script src="assets/js/programacion-lineal/patch.js?v=20261001-3"></script>
+<script src="assets/js/programacion-lineal/render.js?v=20261001-4"></script>
+<script src="assets/js/programacion-lineal/patch.js?v=20261001-4"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{

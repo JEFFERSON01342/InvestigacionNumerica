@@ -516,12 +516,14 @@ function updateSimplexMethodOptions(constraints){
   const options = Array.from(select.options);
   options.forEach(option => {
     const available = standardModel
-      ? ['simplex', 'graphical'].includes(option.value)
-      : ['big-m', 'two-phase', 'graphical'].includes(option.value);
+      ? ['simplex', 'revised', 'graphical'].includes(option.value)
+      : ['revised', 'big-m', 'two-phase', 'graphical'].includes(option.value);
     option.disabled = !available;
     option.hidden = !available;
   });
-  const availableValues = standardModel ? ['simplex', 'graphical'] : ['big-m', 'two-phase', 'graphical'];
+  const availableValues = standardModel
+    ? ['simplex', 'revised', 'graphical']
+    : ['revised', 'big-m', 'two-phase', 'graphical'];
   select.value = availableValues.includes(selected)
     ? selected
     : standardModel ? 'simplex' : 'big-m';
@@ -533,6 +535,7 @@ function updateMethodControls(){
   if(calculateButton){
     calculateButton.textContent = {
       simplex: 'Calcular Símplex',
+      revised: 'Calcular Símplex revisado',
       'big-m': 'Calcular Gran M',
       'two-phase': 'Calcular Dos Fases',
       graphical: 'Resolver método gráfico'
@@ -670,10 +673,13 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       if(implicitNonNegative.length) preflight.notes.push(`Se reconocieron ${implicitNonNegative.length} condición(es) de no negatividad implícita(s).`);
       renderPreflightReport(preflight);
       if(!preflight.ok) throw new Error('El modelo no puede resolverse con el simplex estándar. Revisa la comprobación previa.');
-      const steps = method === 'two-phase' ? twoPhaseSteps(obj, cons) : simplexSteps(obj, cons, method);
+      const steps = method === 'revised'
+        ? revisedSimplexSteps(obj, cons)
+        : method === 'two-phase' ? twoPhaseSteps(obj, cons) : simplexSteps(obj, cons, method);
       console.log('Simplex produced steps count:', steps.length);
       if(!steps || steps.length===0){ status.textContent='No se generaron pasos (revisar entrada).'; return; }
-      renderStepsLatex(steps, obj, cons);
+      if(method === 'revised') renderRevisedSteps(steps);
+      else renderStepsLatex(steps, obj, cons);
       const lastState = steps[steps.length - 1].after || steps[steps.length - 1].state;
       if(steps[steps.length - 1].type === 'unbounded') {
         renderUnboundedVerification(obj.objectiveName || 'Z');

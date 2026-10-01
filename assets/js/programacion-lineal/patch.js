@@ -221,6 +221,248 @@ function twoPhaseSteps(obj, constraints){
   return steps;
 }
 
+function revisedMatrixMultiply(left, right){
+  if(!left.length || !right.length) return [];
+  return left.map(row => right[0].map((_, column) =>
+    row.reduce((sum, value, index) =>
+      rationalAdd(sum, rationalMultiply(value, right[index][column])), rational(0))
+  ));
+}
+
+function revisedMatrixInverse(matrix){
+  const size = matrix.length;
+  const augmented = matrix.map((row, index) => [
+    ...row,
+    ...Array.from({length: size}, (_, column) => rational(index === column ? 1 : 0))
+  ]);
+
+  for(let column = 0; column < size; column++){
+    const pivotRow = augmented.findIndex((row, index) =>
+      index >= column && !rationalIsZero(row[column])
+    );
+    if(pivotRow === -1) throw new Error('La matriz B es singular; no se puede continuar con el símplex revisado.');
+    [augmented[column], augmented[pivotRow]] = [augmented[pivotRow], augmented[column]];
+    const pivot = augmented[column][column];
+    augmented[column] = augmented[column].map(value => rationalDivide(value, pivot));
+    augmented.forEach((row, index) => {
+      if(index === column) return;
+      const factor = row[column];
+      if(rationalIsZero(factor)) return;
+      augmented[index] = row.map((value, entry) =>
+        rationalSubtract(value, rationalMultiply(factor, augmented[column][entry]))
+      );
+    });
+  }
+  return augmented.map(row => row.slice(size));
+}
+
+function revisedColumn(matrix, columnIndex){
+  return matrix.map(row => row[columnIndex]);
+}
+
+function revisedSimplexSnapshot(built, matrix, rhs, basis, costs, phase, iteration, cleanup = []){
+  const basisMatrix = matrix.map(row => basis.map(columnIndex => row[columnIndex]));
+  const inverse = revisedMatrixInverse(basisMatrix);
+  const basicValues = revisedMatrixMultiply(inverse, rhs.map(value => [value])).map(row => row[0]);
+  const basicCosts = basis.map(columnIndex => costs[columnIndex]);
+  const columnCount = built.vars.length + built.slackNames.length;
+  const nonbasic = Array.from({length: columnCount}, (_, columnIndex) => columnIndex)
+    .filter(columnIndex => !basis.includes(columnIndex) &&
+      (phase !== 2 || !/^A\d+$/.test(tableauColumnName(built, columnIndex))));
+  const nonbasicColumns = nonbasic.map(columnIndex => revisedColumn(matrix, columnIndex));
+  const zValues = nonbasicColumns.map(column => {
+    const transformedColumn = revisedMatrixMultiply(inverse, column.map(value => [value]));
+    return basicCosts.reduce((sum, cost, rowIndex) =>
+      rationalAdd(sum, rationalMultiply(cost, transformedColumn[rowIndex][0])), rational(0));
+  });
+  const nonbasicCosts = nonbasic.map(columnIndex => costs[columnIndex]);
+  const reducedCosts = zValues.map((value, index) => rationalSubtract(value, nonbasicCosts[index]));
+  const enteringPosition = nonbasic.findIndex((_, index) => rationalCompare(reducedCosts[index], 0) < 0);
+  const enteringIndex = enteringPosition < 0 ? -1 : nonbasic[enteringPosition];
+  let ratios = [];
+  let leavingRowIndex = -1;
+  if(enteringIndex >= 0){
+    const direction = revisedMatrixMultiply(inverse, revisedColumn(matrix, enteringIndex).map(value => [value]))
+      .map(row => row[0]);
+    let bestRatio = null;
+    let bestBasicIndex = Infinity;
+    ratios = basicValues.map((value, rowIndex) => {
+      const coefficient = direction[rowIndex];
+      if(rationalCompare(coefficient, 0) <= 0) return null;
+      const ratio = rationalDivide(value, coefficient);
+      if(rationalCompare(ratio, 0) < 0) return null;
+      const comparison = bestRatio === null ? -1 : rationalCompare(ratio, bestRatio);
+      const basicIndex = basis[rowIndex];
+      if(bestRatio === null || comparison < 0 || (comparison === 0 && basicIndex < bestBasicIndex)){
+        bestRatio = ratio;
+        bestBasicIndex = basicIndex;
+        leavingRowIndex = rowIndex;
+      }
+      return ratio;
+    });
+  }
+
+  const objectiveValue = basicCosts.reduce((sum, cost, index) =>
+    rationalAdd(sum, rationalMultiply(cost, basicValues[index])), rational(0));
+  const allReducedCosts = Array.from({length: columnCount}, (_, columnIndex) => {
+    const basisPosition = basis.indexOf(columnIndex);
+    if(basisPosition >= 0) return rational(0);
+    const column = revisedColumn(matrix, columnIndex);
+    const transformed = revisedMatrixMultiply(inverse, column.map(value => [value]));
+    return rationalSubtract(
+      basicCosts.reduce((sum, cost, rowIndex) =>
+        rationalAdd(sum, rationalMultiply(cost, transformed[rowIndex][0])), rational(0)),
+      costs[columnIndex]
+    );
+  });
+  const canonicalRows = revisedMatrixMultiply(inverse, matrix);
+  const state = {
+    vars: built.vars.slice(),
+    slackNames: built.slackNames.slice(),
+    tableau: canonicalRows.map((row, index) => ({
+      coeffs: row.slice(0, built.vars.length),
+      slack: row.slice(built.vars.length),
+      rhs: basicValues[index],
+      basic: tableauColumnName(built, basis[index])
+    })),
+    objRow: {
+      coeffs: allReducedCosts.slice(0, built.vars.length),
+      slack: allReducedCosts.slice(built.vars.length),
+      rhs: objectiveValue,
+      basic: 'Z'
+    },
+    method: 'revised',
+    objectiveDirection: built.objectiveDirection,
+    objectiveSense: built.objectiveSense,
+    objectiveName: built.objectiveName || 'Z',
+    objectiveCoeffs: built.objectiveCoeffs,
+    originalVars: built.originalVars,
+    variableMap: built.variableMap,
+    variableDomains: built.variableDomains,
+    freeVariables: built.freeVariables
+  };
+
+  return {
+    type: 'revised',
+    phase,
+    iteration,
+    A: matrix.map(row => row.slice()),
+    B: basisMatrix,
+    A_j: matrix.map(row => nonbasic.map(columnIndex => row[columnIndex])),
+    B_inverse: inverse,
+    b: rhs.slice(),
+    x_B: basicValues.slice(),
+    C: costs.slice(),
+    C_B: basicCosts,
+    C_j: nonbasicCosts,
+    nonbasic,
+    reducedCosts,
+    enteringIndex,
+    leavingRowIndex,
+    ratios,
+    state,
+    cleanup
+  };
+}
+
+function revisedSimplexSteps(obj, constraints){
+  const built = buildTableau(obj, constraints);
+  const stateForColumns = {vars: built.vars, slackNames: built.slackNames};
+  built.objectiveName = obj.objectiveName || 'Z';
+  const matrix = built.tableau.map(row => [...row.coeffs, ...row.slack]);
+  const rhs = built.tableau.map(row => row.rhs);
+  let basis = built.tableau.map(row => tableauColumnIndex(stateForColumns, row.basic));
+  const artificialIndexes = new Set(built.slackNames
+    .map((name, index) => /^A\d+$/.test(name) ? built.vars.length + index : -1)
+    .filter(index => index >= 0));
+  const steps = [];
+  const optimize = (phase, costs) => {
+    for(let iteration = 1; iteration <= 200; iteration++){
+      const step = revisedSimplexSnapshot(built, matrix, rhs, basis, costs, phase, iteration);
+      steps.push(step);
+      if(step.enteringIndex === -1){
+        step.decision = 'optimal';
+        return step;
+      }
+      if(step.leavingRowIndex === -1){
+        step.type = 'unbounded';
+        step.decision = 'unbounded';
+        return step;
+      }
+      step.decision = 'pivot';
+      basis[step.leavingRowIndex] = step.enteringIndex;
+    }
+    throw new Error(`Se alcanzó el límite de 200 iteraciones en la Fase ${phase} del símplex revisado.`);
+  };
+
+  if(artificialIndexes.size){
+    const phaseOneCosts = Array.from({length: built.vars.length + built.slackNames.length}, (_, columnIndex) =>
+      rational(artificialIndexes.has(columnIndex) ? -1 : 0)
+    );
+    const phaseOne = optimize(1, phaseOneCosts);
+    if(phaseOne.decision !== 'optimal') return steps;
+    if(rationalCompare(phaseOne.state.objRow.rhs, 0) < 0){
+      phaseOne.type = 'infeasible';
+      phaseOne.decision = 'infeasible';
+      return steps;
+    }
+
+    const cleanup = [];
+    for(let rowIndex = 0; rowIndex < basis.length;){
+      if(!artificialIndexes.has(basis[rowIndex])){
+        rowIndex++;
+        continue;
+      }
+      const current = revisedSimplexSnapshot(built, matrix, rhs, basis, phaseOneCosts, 1, steps.length, cleanup);
+      if(!rationalIsZero(current.state.tableau[rowIndex].rhs)){
+        const infeasible = steps[steps.length - 1];
+        infeasible.type = 'infeasible';
+        infeasible.decision = 'infeasible';
+        return steps;
+      }
+      const basicSet = new Set(basis);
+      const inverseRow = current.B_inverse[rowIndex];
+      const replacement = matrix[0].findIndex((_, columnIndex) => {
+        if(artificialIndexes.has(columnIndex) || basicSet.has(columnIndex)) return false;
+        const coefficient = inverseRow.reduce((sum, value, matrixRow) =>
+          rationalAdd(sum, rationalMultiply(value, matrix[matrixRow][columnIndex])), rational(0));
+        return !rationalIsZero(coefficient);
+      });
+      if(replacement >= 0){
+        const leaving = tableauColumnName(stateForColumns, basis[rowIndex]);
+        basis[rowIndex] = replacement;
+        cleanup.push(`Se reemplazó ${leaving} (artificial básica en cero) por ${tableauColumnName(stateForColumns, replacement)}.`);
+        continue;
+      }
+      if(!rationalIsZero(current.state.tableau[rowIndex].rhs)){
+        const infeasible = steps[steps.length - 1];
+        infeasible.type = 'infeasible';
+        infeasible.decision = 'infeasible';
+        return steps;
+      }
+      cleanup.push(`Se eliminó la fila redundante de ${tableauColumnName(stateForColumns, basis[rowIndex])}; su lado derecho es cero y no aporta una columna no artificial.`);
+      matrix.splice(rowIndex, 1);
+      rhs.splice(rowIndex, 1);
+      basis.splice(rowIndex, 1);
+    }
+    if(steps.length) steps[steps.length - 1].cleanup = cleanup;
+  }
+
+  const phaseTwoCosts = Array.from({length: built.vars.length + built.slackNames.length}, (_, columnIndex) =>
+    artificialIndexes.has(columnIndex)
+      ? rational(0)
+      : columnIndex < built.vars.length
+        ? built.objectiveVector[built.vars[columnIndex]] || rational(0)
+        : rational(0));
+  if(artificialIndexes.size) steps.push({
+    type: 'revised-phase',
+    phase: 2,
+    message: 'La Fase I encontró una base factible; se retiran las artificiales de la función objetivo y se restaura el objetivo original.'
+  });
+  const phaseTwo = optimize(2, phaseTwoCosts);
+  return steps;
+}
+
 function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
   const issues = [];
   const notes = [];
@@ -242,6 +484,8 @@ function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
   if(!issues.length){
     if(method === 'simplex'){
       notes.push('Se aplicará Símplex estándar: las restricciones proporcionan una base inicial de holguras y no se necesitan variables artificiales.');
+    } else if(method === 'revised'){
+      notes.push('Se aplicará Símplex revisado: se mostrarán A, B, A_j, B^{-1}, b y los costos reducidos en cada iteración; si hace falta, la Fase I construirá una base factible.');
     } else if(method === 'graphical'){
       notes.push(`Se aplicará el método gráfico: se consideran los signos seleccionados, se intersectan las fronteras y se evalúa ${obj.objectiveName || 'Z'} en cada vértice factible.`);
     } else {
@@ -1223,6 +1467,126 @@ function renderStepsLatex(steps, obj, constraints){
     ? '<h3>Modelo infactible</h3><p>La Fase I/penalización conserva una variable artificial positiva. No se puede aceptar esta tabla como solución del problema original.</p>'
     : `<h3>Solución óptima</h3><p><strong>Fracción (decimal):</strong> ${solution.vars.map(item => `\\(${simplexNameToLatex(item.var)} = ${formatNum(item.value)}\\;(${formatDecimal(item.value)})\\)`).join(', ')}<br>\\(${initial.objectiveName || 'Z'} = ${formatNum(solution.Z)}\\;(${formatDecimal(solution.Z)})\\)</p>`;
   container.appendChild(solutionEl);
+  typesetMath([container]);
+}
+
+function revisedMatrixLatex(matrix, rowCount, columnCount){
+  const rows = Array.from({length: rowCount}, (_, rowIndex) =>
+    Array.from({length: columnCount}, (_, columnIndex) =>
+      formatNum(matrix[rowIndex]?.[columnIndex] ?? rational(0))
+    ).join(' & ')
+  );
+  return `\\begin{bmatrix}${rows.map(row => row || '\\,').join(' \\\\ ')}\\end{bmatrix}`;
+}
+
+function revisedVectorLatex(values, columnVector = false){
+  const entries = values.map(value => typeof value === 'string' ? value : formatNum(value));
+  return `\\begin{bmatrix}${entries.join(columnVector ? ' \\\\ ' : ' & ') || '\\,'}\\end{bmatrix}`;
+}
+
+function renderRevisedSteps(steps){
+  const container = $id('steps');
+  container.replaceChildren();
+  steps.forEach(step => {
+    if(step.type === 'revised-phase'){
+      const transition = document.createElement('article');
+      transition.className = 'step-card phase-card';
+      transition.innerHTML = `<h3>Fase II</h3><p>${step.message}</p>`;
+      container.appendChild(transition);
+      return;
+    }
+    const card = document.createElement('article');
+    card.className = 'step-card revised-iteration';
+    const phaseName = step.phase === 1 ? 'Fase I: encontrar una base factible' : 'Fase II: optimizar el objetivo original';
+    const basicNames = step.state.tableau.map(row => row.basic);
+    const nonbasicNames = step.nonbasic.map(index =>
+      index < step.state.vars.length ? step.state.vars[index] : step.state.slackNames[index - step.state.vars.length]
+    );
+    const variableNames = [...step.state.vars, ...step.state.slackNames];
+    const columnCount = variableNames.length;
+    card.innerHTML = `<h3>Símplex revisado — ${phaseName}, iteración ${step.iteration}</h3>
+      <p>Base actual \\(B=[${basicNames.map(simplexNameToLatex).join(', ')}]\\).</p>`;
+
+    if(step.cleanup.length){
+      const cleanup = document.createElement('p');
+      cleanup.className = 'phase-heading';
+      cleanup.innerHTML = `<strong>Ajuste de base al terminar la Fase I:</strong><br>${step.cleanup.join('<br>')}`;
+      card.appendChild(cleanup);
+    }
+
+    const matrices = document.createElement('div');
+    matrices.className = 'revised-matrices';
+    matrices.innerHTML = `<h4>Matrices de la iteración</h4>
+      <p><strong>\\(A\\)</strong> (columnas \\(${variableNames.map(simplexNameToLatex).join(', ')}\\))</p>
+      \\[${revisedMatrixLatex(step.A, step.A.length, columnCount)}\\]
+      <p><strong>\\(B\\)</strong> (columnas básicas \\(${basicNames.map(simplexNameToLatex).join(', ')}\\))</p>
+      \\[${revisedMatrixLatex(step.B, step.B.length, step.B.length)}\\]
+      <p><strong>\\(A_j\\)</strong> (columnas no básicas \\(${nonbasicNames.map(simplexNameToLatex).join(', ') || '\\varnothing'}\\))</p>
+      \\[${revisedMatrixLatex(step.A_j, step.A.length, nonbasicNames.length)}\\]
+      <p><strong>\\(B^{-1}\\)</strong></p>
+      \\[${revisedMatrixLatex(step.B_inverse, step.B_inverse.length, step.B_inverse.length)}\\]
+      <p><strong>\\(b\\)</strong></p>\\[${revisedVectorLatex(step.b, true)}\\]
+      <p><strong>\\(B^{-1}b=x_B\\)</strong></p>\\[${revisedVectorLatex(step.x_B, true)}\\]
+      <p><strong>\\(C\\)</strong> (orden de columnas de \\(A\\))</p>\\[${revisedVectorLatex(step.C)}\\]
+      <p><strong>\\(C_B\\)</strong> (orden de filas de \\(B\\))</p>\\[${revisedVectorLatex(step.C_B)}\\]
+      <p><strong>\\(C_j\\)</strong> (orden de columnas de \\(A_j\\))</p>\\[${revisedVectorLatex(step.C_j)}\\]`;
+    if(step.phase === 2 && step.state.slackNames.some(name => /^A\d+$/.test(name))){
+      matrices.insertAdjacentHTML('beforeend', '<p>En la Fase II, las columnas artificiales se excluyen de \\(A_j\\) para que no puedan volver a entrar a la base.</p>');
+    }
+    card.appendChild(matrices);
+
+    const check = document.createElement('section');
+    check.className = 'revised-check';
+    check.innerHTML = `<h4>Fase 1 de la iteración: costos reducidos y variable entrante</h4>
+      <p>\\(C_B B^{-1}A_j-C_j = ${revisedVectorLatex(step.reducedCosts)}\\)</p>`;
+    if(step.decision === 'optimal'){
+      check.insertAdjacentHTML('beforeend', '<p>No quedan costos reducidos negativos entre las columnas elegibles; se alcanza el óptimo de esta fase.</p>');
+    } else if(step.decision === 'infeasible'){
+      check.insertAdjacentHTML('beforeend', `<p>La suma mínima de artificiales no es cero (valor de Fase I: \\(${formatNum(step.state.objRow.rhs)}\\)); el modelo es infactible.</p>`);
+    } else if(step.decision === 'unbounded'){
+      check.insertAdjacentHTML('beforeend', '<p>La variable entrante no tiene coeficientes positivos en \\(B^{-1}A_k\\); el problema es no acotado.</p>');
+    } else {
+      const enteringName = step.enteringIndex < step.state.vars.length
+        ? step.state.vars[step.enteringIndex]
+        : step.state.slackNames[step.enteringIndex - step.state.vars.length];
+      check.insertAdjacentHTML('beforeend', `<p>Entra \\(${simplexNameToLatex(enteringName)}\\), cuyo costo reducido es negativo.</p>`);
+    }
+    card.appendChild(check);
+
+    if(step.decision === 'pivot'){
+      const enteringName = step.enteringIndex < step.state.vars.length
+        ? step.state.vars[step.enteringIndex]
+        : step.state.slackNames[step.enteringIndex - step.state.vars.length];
+      const direction = revisedMatrixMultiply(step.B_inverse,
+        step.A.map(row => [row[step.enteringIndex]])).map(row => row[0]);
+      const ratios = step.ratios.map((ratio, index) =>
+        ratio === null
+          ? '\\text{no elegible}'
+          : `\\frac{${formatNum(step.state.tableau[index].rhs)}}{${formatNum(direction[index])}}=${formatNum(ratio)}`
+      );
+      const ratioCard = document.createElement('section');
+      ratioCard.className = 'revised-check';
+      ratioCard.innerHTML = `<h4>Fase 2 de la iteración: razón mínima</h4>
+        <p>\\(d=B^{-1}A_k=${revisedVectorLatex(direction, true)}\\), con \\(A_k=A_{${simplexNameToLatex(enteringName)}}\\).</p>
+        <p>\\(x_B/d = ${revisedVectorLatex(ratios)}\\).</p>
+        <p>Sale \\(${simplexNameToLatex(step.state.tableau[step.leavingRowIndex].basic)}\\); se actualiza la base y se recalculan las matrices en la siguiente iteración.</p>`;
+      card.appendChild(ratioCard);
+    }
+    container.appendChild(card);
+  });
+
+  const finalStep = [...steps].reverse().find(step => step.state);
+  if(finalStep){
+    const solution = computeSolutionFromTable(finalStep.state);
+    const result = document.createElement('div');
+    result.className = solution.infeasible ? 'simplex-solution simplex-unbounded' : 'simplex-solution';
+    result.innerHTML = solution.infeasible
+      ? '<h3>Modelo infactible</h3><p>La Fase I no pudo eliminar el valor positivo de las variables artificiales.</p>'
+      : `<h3>Solución ${finalStep.decision === 'unbounded' ? 'no acotada' : 'óptima'}</h3><p>${solution.vars.map(item =>
+        `\\(${simplexNameToLatex(item.var)}=${formatNum(item.value)}\\;(${formatDecimal(item.value)})\\)`
+      ).join(', ')}<br>\\(${finalStep.state.objectiveName || 'Z'}=${formatNum(solution.Z)}\\;(${formatDecimal(solution.Z)})\\)</p>`;
+    container.appendChild(result);
+  }
   typesetMath([container]);
 }
 

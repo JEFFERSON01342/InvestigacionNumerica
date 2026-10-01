@@ -119,6 +119,10 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 .verification-box.warning{ background:#fff7ed; border-left:4px solid #f59e0b; }
 .simplex-unbounded{ background:#fff7ed !important; border-left:4px solid #f59e0b; }
 .phase-heading{ background:#fefce8; border-left:4px solid #ca8a04; padding:10px; border-radius:6px; }
+.revised-iteration{ border-left:4px solid #0f766e; }
+.revised-matrices, .revised-check{ overflow-x:auto; padding:8px 10px; margin:10px 0; border-radius:8px; background:#f8fafc; }
+.revised-check{ border-left:4px solid #0f766e; }
+.revised-matrices p, .revised-check p{ overflow-wrap:anywhere; }
 .graphical-method{ background:#eff6ff !important; border-left:4px solid #2563eb; }
 .graphical-procedure{ border-left:4px solid #64748b; }
 .graphical-coordinate-step{ border-top:1px solid #d1d5db; padding:10px 4px; }
