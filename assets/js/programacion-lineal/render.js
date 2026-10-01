@@ -516,13 +516,13 @@ function updateSimplexMethodOptions(constraints){
   const options = Array.from(select.options);
   options.forEach(option => {
     const available = standardModel
-      ? ['simplex', 'revised', 'graphical'].includes(option.value)
+      ? ['simplex', 'revised', 'big-m', 'two-phase', 'graphical'].includes(option.value)
       : ['revised', 'big-m', 'two-phase', 'graphical'].includes(option.value);
     option.disabled = !available;
     option.hidden = !available;
   });
   const availableValues = standardModel
-    ? ['simplex', 'revised', 'graphical']
+    ? ['simplex', 'revised', 'big-m', 'two-phase', 'graphical']
     : ['revised', 'big-m', 'two-phase', 'graphical'];
   select.value = availableValues.includes(selected)
     ? selected
@@ -541,14 +541,154 @@ function updateMethodControls(){
       graphical: 'Resolver método gráfico'
     }[method] || 'Calcular método';
   }
+  refreshExampleOptions();
+}
+
+const simplexExamples = [
+  {
+    method: 'simplex',
+    label: 'Símplex estándar — mezcla de productos',
+    objective: '3x+2y',
+    constraints: ['x+y<=4', 'x<=2', 'y<=3']
+  },
+  {
+    method: 'revised',
+    label: 'Símplex revisado — costos reducidos y pivotes',
+    objective: '5x+4y',
+    constraints: ['6x+4y<=24', 'x+2y<=6', 'x<=3']
+  },
+  {
+    method: 'big-m',
+    label: 'Gran M — restricción mayor o igual',
+    objective: '3x+2y',
+    constraints: ['x+y>=4', 'x<=3', 'y<=3']
+  },
+  {
+    method: 'two-phase',
+    label: 'Dos Fases — base artificial inicial',
+    objective: '5x+4y',
+    constraints: ['6x+4y>=12', 'x+y<=5', 'x<=4', 'y<=3']
+  },
+  {
+    method: 'graphical',
+    label: 'Método gráfico — región de dos variables',
+    objective: '3x+2y',
+    constraints: ['x+y<=4', 'x<=3', 'y<=2']
+  }
+];
+
+function refreshExampleOptions(){
+  const select = $id('example-pl');
+  const runButton = $id('run-example-pl');
+  const method = $id('method-pl')?.value;
+  if(!select || !runButton) return;
+  const examples = simplexExamples.filter(example => example.method === method);
+  select.replaceChildren(new Option('Elige un ejemplo para el método seleccionado', ''));
+  examples.forEach((example, index) => select.add(new Option(example.label, String(index))));
+  runButton.disabled = examples.length === 0 || !select.value;
+}
+
+function runSelectedExample(){
+  const selectedValue = $id('example-pl')?.value;
+  if(!selectedValue){
+    $id('status').textContent = 'Selecciona un ejemplo para el método actual.';
+    return;
+  }
+  const selectedIndex = Number(selectedValue);
+  const example = simplexExamples.filter(item => item.method === $id('method-pl')?.value)[selectedIndex];
+  if(!example){
+    $id('status').textContent = 'Selecciona un ejemplo para el método actual.';
+    return;
+  }
+
+  const objectiveField = $id('objective-field');
+  const constraintField = $id('constraint-field');
+  objectiveField.value = example.objective;
+  objectiveField.dispatchEvent(new Event('input', {bubbles:true}));
+  constraintField.value = '';
+  constraintsLatex.splice(0, constraintsLatex.length, ...example.constraints);
+  for(const variable of Object.keys(variableDomainsPL)) delete variableDomainsPL[variable];
+  collectVars(
+    parseObjective(latexToAscii(example.objective)),
+    parseConstraints(example.constraints.map(latexToAscii).join('\n'))
+  ).forEach(variable => { variableDomainsPL[variable] = 'nonnegative'; });
+  document.querySelector('input[name="sense-pl"][value="max"]').checked = true;
+  $id('dual-mode-pl').value = 'off';
+  $id('dual-focus-item').hidden = true;
+  $id('method-pl').value = example.method;
+  renderConstraintBracket(constraintsLatex);
+  updateVariableDomainControls();
+  updateMethodControls();
+  $id('preflight').scrollIntoView({behavior:'smooth', block:'center'});
+  $id('btn-calc-pl').click();
+  window.setTimeout(() => {
+    $id('steps').scrollIntoView({behavior:'smooth', block:'start'});
+    typesetMath();
+  }, 150);
 }
 
 // helper to create step cards in #steps
 function appendStepCard(html){ const container = $id('steps'); const card = document.createElement('div'); card.className='step-card'; card.innerHTML = html; container.appendChild(card); }
 
+function displayVariableMap(objectiveLatex = $id('objective-field')?.value || '', constraintLines = constraintsLatex){
+  let objective = {vars: []};
+  try {
+    objective = parseObjective(latexToAscii(objectiveLatex));
+  } catch(error) {
+    console.debug('No se pudieron detectar todas las variables de la función para mostrar subíndices:', error.message);
+  }
+  const constraints = [];
+  constraintLines.forEach(line => {
+    try {
+      constraints.push(...parseConstraints(latexToAscii(line)));
+    } catch(error) {
+      console.debug('No se pudieron detectar todas las variables de una restricción para mostrar subíndices:', error.message);
+    }
+  });
+  return new Map(collectVars(objective, constraints).map((variable, index) => [variable, index + 1]));
+}
 
-function renderConstraintBracket(constraintsLatexLocal){ const el=$id('constraintBracket'); if(!constraintsLatexLocal.length){ el.innerHTML='\\(\\left\\{\\begin{array}{l} \\text{(vacío)}\\\\\\end{array}\\right.\\)'; typesetMath(); return; } const body = constraintsLatexLocal.map(c=> c.replace(/\$/g,'')).join(' \\\\ '); const latex = `\\(\\left\\{\\begin{array}{l} ${body} \\\\ \\end{array}\\right.\\)`; el.innerHTML = latex; typesetMath(); }
-function renderInputDisplay(sense,objLatex,constraintsLatexLocal){ const el=$id('render-input'); el.innerHTML=''; const senseText = sense==='max'?'Maximizar':'Minimizar'; const p=document.createElement('div'); p.innerHTML = `<strong>${senseText} Z = </strong> $${objLatex || ''}$`; el.appendChild(p); const br=document.createElement('div'); br.innerHTML='<strong>Restricciones:</strong>'; el.appendChild(br); const list=document.createElement('div'); list.innerHTML = constraintsLatexLocal.map(c=>`$${c}$`).join('<br>'); el.appendChild(list); typesetMath(); }
+function formatVariablesForDisplay(latex, variableIndexes){
+  return latex.replace(/\\[A-Za-z]+|[A-Za-z][A-Za-z0-9]*(?:_\{?\d+\}?)?/g, token => {
+    if(token.startsWith('\\')) return token;
+    const variable = token.toLowerCase().replace(/_\{?(\d+)\}?/, '$1');
+    const index = variableIndexes.get(variable);
+    return index ? `x_{${index}}` : token;
+  });
+}
+
+function renderConstraintBracket(constraintsLatexLocal){
+  const el = $id('constraintBracket');
+  if(!constraintsLatexLocal.length){
+    el.innerHTML = '\\(\\left\\{\\begin{array}{l} \\text{(vacío)}\\\\\\end{array}\\right.\\)';
+    typesetMath();
+    return;
+  }
+  const variables = displayVariableMap(undefined, constraintsLatexLocal);
+  const body = constraintsLatexLocal
+    .map(constraint => formatVariablesForDisplay(constraint.replace(/\$/g, ''), variables))
+    .join(' \\\\ ');
+  el.innerHTML = `\\(\\left\\{\\begin{array}{l} ${body} \\\\ \\end{array}\\right.\\)`;
+  typesetMath();
+}
+function renderInputDisplay(sense,objLatex,constraintsLatexLocal){
+  const el = $id('render-input');
+  const variables = displayVariableMap(objLatex, constraintsLatexLocal);
+  el.innerHTML = '';
+  const senseText = sense === 'max' ? 'Maximizar' : 'Minimizar';
+  const objective = document.createElement('div');
+  objective.innerHTML = `<strong>${senseText} Z = </strong> $${formatVariablesForDisplay(objLatex || '', variables)}$`;
+  el.appendChild(objective);
+  const heading = document.createElement('div');
+  heading.innerHTML = '<strong>Restricciones:</strong>';
+  el.appendChild(heading);
+  const list = document.createElement('div');
+  list.innerHTML = constraintsLatexLocal
+    .map(constraint => `$${formatVariablesForDisplay(constraint, variables)}$`)
+    .join('<br>');
+  el.appendChild(list);
+  typesetMath();
+}
 
 function renderStepsLatex(steps){ const container=$id('steps'); container.innerHTML=''; if(!steps || steps.length===0) return; const initial=steps[0]; const title0=document.createElement('h3'); title0.textContent='Tabla inicial'; container.appendChild(title0); const pre0=document.createElement('div'); pre0.innerHTML = tableToLatex(initial); container.appendChild(pre0); typesetMath(); for(let s=1;s<steps.length;s++){ const st=steps[s]; const title=document.createElement('h3'); title.textContent = `Tabla ${s}`; container.appendChild(title); const beforeDiv=document.createElement('div'); beforeDiv.innerHTML = tableToLatex(steps[s-1]); container.appendChild(beforeDiv); const ops=document.createElement('div'); ops.innerHTML = `<strong>Operación:</strong> pivot aplicado.`; container.appendChild(ops); const afterDiv=document.createElement('div'); afterDiv.innerHTML = tableToLatex(st); container.appendChild(afterDiv); typesetMath(); }
   // solution
@@ -578,6 +718,10 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
 
   objField.addEventListener('input', updateVariableDomainControls);
   methodSelect.addEventListener('change', updateMethodControls);
+  $id('example-pl').addEventListener('change', event=>{
+    $id('run-example-pl').disabled = !event.currentTarget.value;
+  });
+  $id('run-example-pl').addEventListener('click', runSelectedExample);
   updateVariableDomainControls();
   updateMethodControls();
   addBtn.addEventListener('click', ()=>{ const raw = consField.value.trim(); if(!raw) return; constraintsLatex.push(raw); renderConstraintBracket(constraintsLatex); updateVariableDomainControls(); consField.value = ''; consField.focus(); if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs(); });

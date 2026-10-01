@@ -14,7 +14,7 @@
             console.warn('No se pudo recuperar la preferencia de tema:', error);
         }
     </script>
-    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-4">
+    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-7">
     <link rel="icon" type="image/png" href="assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -56,7 +56,7 @@
         <div class="onboarding-copy">
             <p class="onboarding-eyebrow">Tu guía de Programación Lineal</p>
             <h2 id="onboarding-title">¡Hola! Soy Geo, tu guía</h2>
-            <p id="onboarding-intro">Te acompaño a plantear el modelo y elegir cómo resolverlo. Sigue estos pasos para obtener una solución explicada.</p>
+            <p id="onboarding-intro">Te acompaño a plantear el modelo y elegir cómo resolverlo. Al terminar esta guía, te mostraré dónde configurar el método y cargar ejemplos interactivos.</p>
         </div>
         <ol class="onboarding-steps">
             <li>
@@ -69,7 +69,7 @@
             </li>
             <li>
                 <span class="onboarding-step-number">3</span>
-                <div><strong>Configura variables y método</strong><p>Define el signo de cada variable. El método gráfico requiere exactamente dos variables; para los demás modelos puedes usar Símplex, Símplex revisado, Gran M o Dos Fases según las restricciones.</p></div>
+                <div><strong>Configura variables y método</strong><p>Define el signo de cada variable y el método. También puedes elegir un caso preestablecido para cargar los datos y ver su resolución automáticamente.</p></div>
             </li>
             <li>
                 <span class="onboarding-step-number">4</span>
@@ -162,6 +162,14 @@
                             <option value="dual">Resolver el dual y mostrar el primal</option>
                         </select>
                     </div>
+                    <div class="config-item examples-item">
+                        <label for="example-pl">Ejemplo de demostración</label>
+                        <select id="example-pl" aria-describedby="example-description">
+                            <option value="">Elige un ejemplo para el método seleccionado</option>
+                        </select>
+                        <p id="example-description">Carga un modelo de muestra y ejecútalo automáticamente para ver el procedimiento completo.</p>
+                        <button id="run-example-pl" type="button" disabled>Cargar y resolver ejemplo</button>
+                    </div>
                     <div class="config-item variable-domains-item">
                         <label>Signo de cada variable</label>
                         <div id="variable-domains-pl" class="variable-domains">
@@ -175,7 +183,7 @@
                 <h2>Función objetivo Z</h2>
                 <div class="funcion-wrapper">
                     <div class="funcion-label">Z =</div>
-                    <math-field id="objective-field"></math-field>
+                    <math-field id="objective-field" placeholder="Ejemplo: 3x + 2y + 5z"></math-field>
                 </div>
                 <p>Las fracciones se calculan exactamente y las tablas y matrices del Símplex revisado se muestran en fracciones. La solución final también incluye su aproximación decimal.</p>
                 <div id="preview-objective" class="preview-box">$$Z=$$</div>
@@ -184,7 +192,7 @@
             <div class="card funcion-box">
                 <h2>Restricción (una por vez)</h2>
                 <div class="funcion-wrapper">
-                    <math-field id="constraint-field"></math-field>
+                    <math-field id="constraint-field" placeholder="Ejemplo: 2x + y ≤ 12"></math-field>
                 </div>
                 <div class="acciones-container">
                     <button id="btn-add-constraint">Añadir restricción</button>
@@ -236,8 +244,24 @@
 
 </main>
 
-<script src="assets/js/programacion-lineal/render.js?v=20261001-4"></script>
-<script src="assets/js/programacion-lineal/patch.js?v=20261001-4"></script>
+<div id="guided-tour" class="guided-tour" hidden aria-live="polite">
+    <div id="guided-tour-spotlight" class="guided-tour-spotlight" aria-hidden="true"></div>
+    <section id="guided-tour-card" class="guided-tour-card" role="dialog" aria-modal="false" aria-labelledby="guided-tour-title">
+        <p id="guided-tour-progress" class="guided-tour-progress"></p>
+        <h2 id="guided-tour-title"></h2>
+        <p id="guided-tour-description"></p>
+        <div class="guided-tour-actions">
+            <button id="guided-tour-skip" type="button" class="guided-tour-skip">Saltar guía</button>
+            <div>
+                <button id="guided-tour-previous" type="button">Anterior</button>
+                <button id="guided-tour-next" type="button">Siguiente</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script src="assets/js/programacion-lineal/render.js?v=20261001-8"></script>
+<script src="assets/js/programacion-lineal/patch.js?v=20261001-7"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -245,6 +269,116 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const onboardingStart = document.getElementById('onboarding-start');
     const onboardingOpen = document.getElementById('onboarding-open');
     const onboardingRemember = document.getElementById('onboarding-remember');
+    const guidedTour = document.getElementById('guided-tour');
+    const guidedTourSpotlight = document.getElementById('guided-tour-spotlight');
+    const guidedTourCard = document.getElementById('guided-tour-card');
+    const guidedTourTitle = document.getElementById('guided-tour-title');
+    const guidedTourDescription = document.getElementById('guided-tour-description');
+    const guidedTourProgress = document.getElementById('guided-tour-progress');
+    const guidedTourPrevious = document.getElementById('guided-tour-previous');
+    const guidedTourNext = document.getElementById('guided-tour-next');
+    let guidedTourIndex = 0;
+    const guidedTourSteps = [
+        {selector: '.config-card', title: 'Configuración del modelo', description: 'Aquí eliges si quieres maximizar o minimizar y defines cómo resolver el problema.'},
+        {selector: '#method-pl', title: 'Elige un método', description: 'Selecciona Símplex, Símplex revisado, Gran M, Dos Fases o el método gráfico. Los ejemplos disponibles cambian según el método.'},
+        {selector: '#dual-mode-pl', title: 'Trabaja con el dual', description: 'Activa esta opción para generar el modelo dual y comparar ambos resultados al resolver.'},
+        {selector: '#variable-domains-pl', title: 'Define los signos', description: 'Elige si cada variable es no negativa, no positiva, fija o libre. Los ejemplos usan variables no negativas.'},
+        {selector: '#example-pl', title: 'Prueba un caso preestablecido', description: 'Elige un ejemplo del método actual y pulsa “Cargar y resolver ejemplo”. Se rellenan los campos y se ejecuta el procedimiento automáticamente.'},
+        {selector: '#objective-field', title: 'Escribe la función objetivo', description: 'Ingresa aquí expresiones como 3x + 2y. La vista previa muestra las variables con subíndices, sin cambiar lo que escribes.'},
+        {selector: '#constraint-field', title: 'Añade las restricciones', description: 'Escribe una restricción y pulsa “Añadir restricción”. Puedes usar ≤, ≥ o igualdad.'},
+        {selector: '#btn-calc-pl', title: 'Resuelve el modelo', description: 'Cuando termines de ingresar los datos, pulsa este botón para ver las iteraciones y la solución.'},
+        {selector: '.simplex-steps-card', title: 'Revisa el procedimiento', description: 'Aquí aparece la resolución paso a paso. Los ejemplos te llevan directamente a estos resultados.'}
+    ];
+
+    function positionGuidedTour(){
+        const step = guidedTourSteps[guidedTourIndex];
+        const target = step && document.querySelector(step.selector);
+        if(!target){
+            finishGuidedTour();
+            return;
+        }
+        document.querySelectorAll('.guided-tour-target').forEach(element => element.classList.remove('guided-tour-target'));
+        target.classList.add('guided-tour-target');
+        const rect = target.getBoundingClientRect();
+        const padding = 7;
+        guidedTourSpotlight.style.left = `${Math.max(4, rect.left - padding)}px`;
+        guidedTourSpotlight.style.top = `${Math.max(4, rect.top - padding)}px`;
+        guidedTourSpotlight.style.width = `${Math.min(window.innerWidth - 8, rect.width + padding * 2)}px`;
+        guidedTourSpotlight.style.height = `${Math.min(window.innerHeight - 8, rect.height + padding * 2)}px`;
+        guidedTourTitle.textContent = step.title;
+        guidedTourDescription.textContent = step.description;
+        guidedTourProgress.textContent = `Paso ${guidedTourIndex + 1} de ${guidedTourSteps.length}`;
+        guidedTourPrevious.disabled = guidedTourIndex === 0;
+        guidedTourNext.textContent = guidedTourIndex === guidedTourSteps.length - 1 ? 'Terminar' : 'Siguiente';
+        const cardRect = guidedTourCard.getBoundingClientRect();
+        const left = Math.min(
+            window.innerWidth - cardRect.width - 16,
+            Math.max(16, rect.left + rect.width / 2 - cardRect.width / 2)
+        );
+        const below = rect.bottom + cardRect.height + 18 < window.innerHeight;
+        const top = below ? rect.bottom + 14 : Math.max(12, rect.top - cardRect.height - 14);
+        guidedTourCard.style.left = `${left}px`;
+        guidedTourCard.style.top = `${top}px`;
+    }
+
+    function showGuidedTourStep(){
+        const step = guidedTourSteps[guidedTourIndex];
+        const target = step && document.querySelector(step.selector);
+        if(!target){
+            finishGuidedTour();
+            return;
+        }
+        target.scrollIntoView({behavior:'smooth', block:'center'});
+        window.setTimeout(positionGuidedTour, 320);
+    }
+
+    function startGuidedTour(){
+        guidedTourIndex = 0;
+        guidedTour.hidden = false;
+        document.body.classList.add('guided-tour-active');
+        showGuidedTourStep();
+    }
+
+    function finishGuidedTour(){
+        guidedTour.hidden = true;
+        document.body.classList.remove('guided-tour-active');
+        document.querySelectorAll('.guided-tour-target').forEach(element => element.classList.remove('guided-tour-target'));
+    }
+
+    guidedTourPrevious.addEventListener('click', ()=>{
+        if(guidedTourIndex > 0){
+            guidedTourIndex--;
+            showGuidedTourStep();
+        }
+    });
+    guidedTourNext.addEventListener('click', ()=>{
+        if(guidedTourIndex === guidedTourSteps.length - 1){
+            finishGuidedTour();
+            return;
+        }
+        guidedTourIndex++;
+        showGuidedTourStep();
+    });
+    document.getElementById('guided-tour-skip').addEventListener('click', finishGuidedTour);
+    window.addEventListener('resize', ()=>{
+        if(!guidedTour.hidden) positionGuidedTour();
+    });
+    window.addEventListener('scroll', ()=>{
+        if(!guidedTour.hidden) positionGuidedTour();
+    }, {passive:true});
+    document.addEventListener('keydown', event=>{
+        if(guidedTour.hidden) return;
+        if(event.key === 'Escape'){
+            finishGuidedTour();
+        } else if(event.key === 'ArrowRight' && guidedTourIndex < guidedTourSteps.length - 1){
+            guidedTourIndex++;
+            showGuidedTourStep();
+        } else if(event.key === 'ArrowLeft' && guidedTourIndex > 0){
+            guidedTourIndex--;
+            showGuidedTourStep();
+        }
+    });
+
     function showOnboarding(){
         if(!onboarding.open) onboarding.showModal();
     }
@@ -258,7 +392,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
             }
         }
         onboarding.close();
-        document.getElementById('objective-field').focus();
+        window.setTimeout(startGuidedTour, 180);
     });
     try {
         if(localStorage.getItem('geomath-onboarding-dismissed') !== 'true') showOnboarding();
@@ -302,7 +436,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const previewObj = document.getElementById('preview-objective');
     function updatePreview(){
         const value = objField && objField.value ? objField.value : '';
-        previewObj.innerHTML = `$$Z=${value}$$`;
+        const displayVariables = typeof displayVariableMap === 'function' ? displayVariableMap() : new Map();
+        const displayValue = typeof formatVariablesForDisplay === 'function'
+            ? formatVariablesForDisplay(value, displayVariables)
+            : value;
+        previewObj.innerHTML = `$$Z=${displayValue}$$`;
         typesetMath();
     }
     objField.addEventListener('input', updatePreview);
