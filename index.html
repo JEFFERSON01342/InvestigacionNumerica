@@ -14,7 +14,7 @@
             console.warn('No se pudo recuperar la preferencia de tema:', error);
         }
     </script>
-    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20260930-14">
+    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-1">
     <link rel="icon" type="image/png" href="assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -68,6 +68,20 @@
                             <option value="big-m">Gran M</option>
                             <option value="two-phase">Dos Fases</option>
                             <option value="graphical">Método gráfico (2 variables)</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label for="dual-mode-pl">Trabajar el modelo dual</label>
+                        <select id="dual-mode-pl">
+                            <option value="off" selected>No</option>
+                            <option value="enabled">Sí</option>
+                        </select>
+                    </div>
+                    <div class="config-item" id="dual-focus-item" hidden>
+                        <label for="dual-focus-pl">Enfoque de resolución</label>
+                        <select id="dual-focus-pl">
+                            <option value="primal" selected>Resolver el primal y mostrar el dual</option>
+                            <option value="dual">Resolver el dual y mostrar el primal</option>
                         </select>
                     </div>
                     <div class="config-item variable-domains-item">
@@ -126,6 +140,11 @@
                 <div id="verification" class="verification-box">Aquí se verificará la solución al finalizar el método.</div>
             </div>
 
+            <div class="card dual-results-card" id="dual-results-card" hidden>
+                <h2 id="dual-results-title">Modelo dual y comparación</h2>
+                <div id="dual-results"></div>
+            </div>
+
             <div class="card">
                 <h2>Gráfica (si aplica)</h2>
                 <div id="plot" style="width:100%;height:360px;"></div>
@@ -139,8 +158,8 @@
 
 </main>
 
-<script src="assets/js/programacion-lineal/render.js?v=20260930-12"></script>
-<script src="assets/js/programacion-lineal/patch.js?v=20260930-12"></script>
+<script src="assets/js/programacion-lineal/render.js?v=20261001-1"></script>
+<script src="assets/js/programacion-lineal/patch.js?v=20261001-1"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -175,6 +194,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     configureMathField(objField);
     configureMathField(consField);
+
+    const dualMode = document.getElementById('dual-mode-pl');
+    const dualFocusItem = document.getElementById('dual-focus-item');
+    dualMode.addEventListener('change', ()=>{
+        dualFocusItem.hidden = dualMode.value !== 'enabled';
+    });
 
     const previewObj = document.getElementById('preview-objective');
     function updatePreview(){

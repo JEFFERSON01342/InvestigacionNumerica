@@ -68,11 +68,24 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 .pivot-cell{ color: #f97316; }
 
 .config-item select{ min-width:180px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; background:#fff; }
+.config-item[hidden]{ display:none; }
 
 .variable-domains{ display:grid; gap:8px; }
 .variable-domain-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .variable-domain-row label{ font-weight:600; }
 .variable-domain-row select{ min-width:220px; }
+.dual-results-card[hidden]{ display:none; }
+.dual-transformation, .dual-comparison{ padding:14px; border:1px solid #cbd5e1; border-radius:10px; margin-bottom:12px; }
+.dual-transformation h3, .dual-comparison h3{ margin-bottom:10px; }
+.dual-transformation p, .dual-comparison p{ margin:8px 0; }
+.dual-matrix-wrap{ max-width:100%; overflow-x:auto; margin:10px 0; }
+.dual-matrix{ border-collapse:collapse; width:auto; min-width:100%; }
+.dual-matrix th, .dual-matrix td{ padding:7px 10px; text-align:center; border:1px solid #cbd5e1; }
+.dual-matrix th{ background:#f1f5f9; }
+.dual-graph-controls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.dual-graph-controls button{ padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer; }
+.dual-graph-controls button.active{ border-color:var(--accent); color:var(--accent); font-weight:700; }
+.dual-graph-controls button:disabled{ cursor:not-allowed; opacity:.55; }
 
 /* render-input */
 #render-input{ background:linear-gradient(180deg,#fff 0%, #fffaf0 100%); padding:12px; border-radius:12px; }
@@ -178,6 +191,20 @@ html[data-theme="dark"] .pl-page .graphical-vertices td{ border-color:#475569; }
 html[data-theme="dark"] .pl-page .graphical-coordinate-step{ border-color:#475569; }
 html[data-theme="dark"] .pl-page .verification-box{ color:#e2e8f0; }
 html[data-theme="dark"] .pl-page .status{ color:#fca5a5; }
+html[data-theme="dark"] .pl-page .dual-transformation,
+html[data-theme="dark"] .pl-page .dual-comparison{ border-color:#475569; }
+html[data-theme="dark"] .pl-page .dual-matrix th,
+html[data-theme="dark"] .pl-page .dual-matrix td{ border-color:#475569; }
+html[data-theme="dark"] .pl-page .dual-matrix th{ background:#1e293b; }
+html[data-theme="dark"] .pl-page .dual-graph-controls button{
+  color:#e2e8f0;
+  background:#0f172a;
+  border-color:#475569;
+}
+html[data-theme="dark"] .pl-page .dual-graph-controls button.active{
+  color:#fca5a5;
+  border-color:#f87171;
+}
 html[data-theme="dark"] .pl-page .acciones-container button.secondary{
   color:#fca5a5;
   background:#1e293b;

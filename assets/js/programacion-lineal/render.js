@@ -594,25 +594,65 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       const consL = constraintsLatex.slice();
       const objAscii = latexToAscii(objLatex);
       console.log('Objective ASCII:', objAscii);
-      const obj = parseObjective((sense? sense+': ':'') + objAscii);
+      let obj = parseObjective((sense? sense+': ':'') + objAscii);
       obj.variableDomains = variableDomains;
       const consAsciiLines = consL.map(l=> latexToAscii(l));
       console.log('Constraints ASCII lines:', consAsciiLines);
-      const parsedConstraints = parseConstraints(consAsciiLines.join('\n'));
+      let parsedConstraints = parseConstraints(consAsciiLines.join('\n'));
+      const dualMode = $id('dual-mode-pl')?.value || 'off';
+      const dualFocus = $id('dual-focus-pl')?.value || 'primal';
+      let dualContext = null;
+      if(dualMode === 'enabled'){
+        obj.vars = collectVars(obj, parsedConstraints);
+        const primalModel = {objective: obj, constraints: parsedConstraints};
+        const dualModel = buildDualModel(obj, parsedConstraints);
+        dualContext = {primal: primalModel, dual: dualModel, focus: dualFocus};
+        $id('dual-results-card').hidden = false;
+        $id('dual-results').replaceChildren();
+        $id('dual-results-title').textContent = dualFocus === 'dual'
+          ? 'Modelo primal y comparación'
+          : 'Modelo dual y comparación';
+        if(dualFocus === 'dual'){
+          obj = dualModel.objective;
+          parsedConstraints = dualModel.constraints;
+          updateSimplexMethodOptions(parsedConstraints);
+          if($id('method-pl').value === 'graphical' && collectVars(obj, parsedConstraints).length !== 2){
+            $id('method-pl').value = isStandardSimplexModel(parsedConstraints) ? 'simplex' : 'big-m';
+            updateMethodControls();
+          }
+        }
+      } else {
+        $id('dual-results-card').hidden = true;
+        $id('dual-results').replaceChildren();
+      }
       const method = $id('method-pl') ? $id('method-pl').value : 'big-m';
+      const workingSense = obj.sense || sense;
       if(method === 'graphical'){
         obj.vars = collectVars(obj, parsedConstraints);
         if(obj.vars.length !== 2) throw new Error('El método gráfico solo se puede aplicar a modelos con exactamente dos variables.');
-        obj.variableDomains = variableDomains;
-        const report = validateSimplexModel(obj, parsedConstraints, sense, method);
+        if(dualFocus !== 'dual') obj.variableDomains = variableDomains;
+        const report = validateSimplexModel(obj, parsedConstraints, workingSense, method);
         renderPreflightReport(report);
         if(!report.ok) throw new Error('El modelo gráfico necesita al menos una restricción válida.');
         const result = solveGraphicalModel(obj, parsedConstraints);
         renderGraphicalResult(result, obj, parsedConstraints);
         renderGraphicalVerification(result, obj);
         plotGraphicalModel(obj, parsedConstraints, result);
+        if(dualContext){
+          if(dualFocus === 'dual') prependDualTransformation(dualContext, $id('steps'));
+          completeDualWorkflow(dualContext, {
+            objective: obj,
+            constraints: parsedConstraints,
+            variables: obj.vars,
+            type: 'graphical',
+            result,
+            value: result.optimum?.objective || null,
+            unbounded: result.unbounded,
+            infeasible: result.feasibleVertices.length === 0
+          });
+        }
         status.textContent = result.unbounded
-          ? 'La región factible es no acotada en la dirección de mejora de Z.'
+          ? `La región factible es no acotada en la dirección de mejora de ${obj.objectiveName || 'Z'}.`
           : result.optimum ? 'Método gráfico completado.' : 'No se encontró una región factible.';
         return;
       }
@@ -626,7 +666,7 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       const implicitConstraints = new Set(implicitNonNegative);
       const cons = parsedConstraints.filter(constraint => !implicitConstraints.has(constraint));
       console.log('Parsed constraints:', cons);
-      const preflight = validateSimplexModel(obj, cons, sense, method);
+      const preflight = validateSimplexModel(obj, cons, workingSense, method);
       if(implicitNonNegative.length) preflight.notes.push(`Se reconocieron ${implicitNonNegative.length} condición(es) de no negatividad implícita(s).`);
       renderPreflightReport(preflight);
       if(!preflight.ok) throw new Error('El modelo no puede resolverse con el simplex estándar. Revisa la comprobación previa.');
@@ -636,15 +676,31 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       renderStepsLatex(steps, obj, cons);
       const lastState = steps[steps.length - 1].after || steps[steps.length - 1].state;
       if(steps[steps.length - 1].type === 'unbounded') {
-        renderUnboundedVerification();
+        renderUnboundedVerification(obj.objectiveName || 'Z');
       } else {
-        const solution = computeSolutionFromTable({...lastState, variableDomains});
+        const solution = computeSolutionFromTable({...lastState, variableDomains: obj.variableDomains});
         if(solution.infeasible) renderInfeasibleVerification();
         else renderResultVerification(solution, obj, cons);
       }
       const built = buildTableau(obj, cons);
       obj.vars = built.originalVars || built.vars;
       plot2vars(obj, cons);
+      if(dualContext){
+        if(dualFocus === 'dual') prependDualTransformation(dualContext, $id('steps'));
+        const solution = steps[steps.length - 1].type === 'unbounded'
+          ? null
+          : computeSolutionFromTable({...lastState, variableDomains: obj.variableDomains});
+        completeDualWorkflow(dualContext, {
+          objective: obj,
+          constraints: cons,
+          variables: obj.vars,
+          type: 'simplex',
+          solution,
+          value: solution && !solution.infeasible ? solution.Z : null,
+          unbounded: steps[steps.length - 1].type === 'unbounded',
+          infeasible: Boolean(solution?.infeasible)
+        });
+      }
       status.textContent = steps[steps.length - 1].type === 'unbounded' ? 'Proceso terminado: el problema no está acotado.' : 'Proceso completado.';
     }catch(e){
       console.error('Error during simplex calculation:', e);
@@ -654,7 +710,7 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       status.textContent = 'Error: '+e.message + ' (ver consola para más detalles)';
     }
   });
-  clearAllBtn.addEventListener('click', ()=>{ objField.value=''; consField.value=''; constraintsLatex.length=0; renderConstraintBracket(constraintsLatex); updateVariableDomainControls(); $id('preflight').textContent='Añade la función objetivo y las restricciones para comprobar el modelo.'; $id('verification').textContent='Aquí se verificará la solución al finalizar el método.'; $id('steps').innerHTML=''; if(typeof simplexDesmos !== 'undefined' && simplexDesmos) simplexDesmos.setBlank(); status.innerText=''; }); }
+  clearAllBtn.addEventListener('click', ()=>{ objField.value=''; consField.value=''; constraintsLatex.length=0; renderConstraintBracket(constraintsLatex); updateVariableDomainControls(); $id('preflight').textContent='Añade la función objetivo y las restricciones para comprobar el modelo.'; $id('verification').textContent='Aquí se verificará la solución al finalizar el método.'; $id('steps').innerHTML=''; $id('dual-results').replaceChildren(); $id('dual-results-card').hidden=true; if(typeof simplexDesmos !== 'undefined' && simplexDesmos) simplexDesmos.setBlank(); status.innerText=''; }); }
 
 // small plot function (2 vars support)
 function plot2vars(obj, constraints){ const plotDiv=$id('plot'); plotDiv.innerHTML=''; if(!obj.vars || obj.vars.length!==2){ plotDiv.innerText='La gráfica solo está disponible para 2 variables.'; return; } const vx=obj.vars[0], vy=obj.vars[1]; const xRange=[0, Math.max(10, ...constraints.map(c=>c.rhs))]; const yRange=[0, Math.max(10, ...constraints.map(c=>c.rhs))]; const pts=[]; const step=(Math.max(xRange[1], yRange[1]))/200; for(let xv=0;xv<=xRange[1]; xv+=step){ for(let yv=0; yv<=yRange[1]; yv+=step){ let ok=true; for(const c of constraints){ const val=(c.coeffs[vx]||0)*xv + (c.coeffs[vy]||0)*yv; if(c.op==='<'+'=' && val>c.rhs+1e-6){ ok=false; break; } if(c.op==='>=' && val<c.rhs-1e-6){ ok=false; break; } if(c.op==='=' && Math.abs(val-c.rhs)>1e-6){ ok=false; break; } } if(ok) pts.push([xv,yv]); } }

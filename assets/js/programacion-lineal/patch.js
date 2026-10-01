@@ -102,6 +102,7 @@ function simplexSteps(obj, constraints, method = 'big-m'){
   const state = { vars: built.vars, slackNames: built.slackNames, tableau: built.tableau, objRow: built.objRow };
   const metadata = {
     method,
+    objectiveName: obj.objectiveName || 'Z',
     objectiveDirection: built.objectiveDirection,
     bigM: method === 'big-m' ? built.bigM : null,
     objectiveSense: built.objectiveSense,
@@ -173,6 +174,7 @@ function twoPhaseSteps(obj, constraints){
   const artificialCoeffs = Object.fromEntries(artificialNames.map(name => [name, rational(1)]));
   const metadata = {
     method: 'two-phase',
+    objectiveName: obj.objectiveName || 'Z',
     objectiveDirection: built.objectiveDirection,
     objectiveSense: built.objectiveSense,
     objectiveCoeffs: built.objectiveCoeffs,
@@ -234,14 +236,14 @@ function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
     variables.forEach(variable => {
       const improves = rationalCompare(rationalMultiply(direction, obj.coeffs[variable] || 0), 0) > 0;
       const limitsVariable = constraints.some(constraint => rationalCompare(constraint.coeffs[variable] || 0, 0) > 0);
-      if(improves && !limitsVariable) notes.push(`${variable} puede mejorar Z sin un límite superior aparente; el simplex lo comprobará mostrando sus iteraciones.`);
+      if(improves && !limitsVariable) notes.push(`${variable} puede mejorar ${obj.objectiveName || 'Z'} sin un límite superior aparente; el simplex lo comprobará mostrando sus iteraciones.`);
     });
   }
   if(!issues.length){
     if(method === 'simplex'){
       notes.push('Se aplicará Símplex estándar: las restricciones proporcionan una base inicial de holguras y no se necesitan variables artificiales.');
     } else if(method === 'graphical'){
-      notes.push('Se aplicará el método gráfico: se consideran los signos seleccionados, se intersectan las fronteras y se evalúa Z en cada vértice factible.');
+      notes.push(`Se aplicará el método gráfico: se consideran los signos seleccionados, se intersectan las fronteras y se evalúa ${obj.objectiveName || 'Z'} en cada vértice factible.`);
     } else {
       notes.push(method === 'two-phase'
         ? 'Se aplicará Dos Fases: la Fase I encuentra una solución básica factible y la Fase II optimiza la función original.'
@@ -256,6 +258,211 @@ function isImplicitNonNegativity(constraint){
   if(constraint.op !== '>=' || !rationalIsZero(constraint.rhs)) return false;
   const terms = Object.entries(constraint.coeffs).filter(([, coefficient]) => !rationalIsZero(coefficient));
   return terms.length === 1 && rationalCompare(terms[0][1], 1) === 0;
+}
+
+function buildDualModel(primalObjective, primalConstraints){
+  const variables = collectVars(primalObjective, primalConstraints);
+  const dualVariables = primalConstraints.map((_, index) => `y${index + 1}`);
+  const primalSense = primalObjective.sense || 'max';
+  const dualObjective = {
+    sense: primalSense === 'max' ? 'min' : 'max',
+    objectiveName: 'W',
+    coeffs: Object.fromEntries(primalConstraints.map((constraint, index) => [
+      dualVariables[index], constraint.rhs
+    ])),
+    vars: dualVariables,
+    variableDomains: {}
+  };
+  primalConstraints.forEach((constraint, index) => {
+    dualObjective.variableDomains[dualVariables[index]] = constraint.op === '='
+      ? 'free'
+      : primalSense === 'max'
+        ? constraint.op === '<=' ? 'nonnegative' : 'nonpositive'
+        : constraint.op === '<=' ? 'nonpositive' : 'nonnegative';
+  });
+
+  const constraints = variables
+    .filter(variable => (primalObjective.variableDomains?.[variable] || 'nonnegative') !== 'zero')
+    .map(variable => {
+      const domain = primalObjective.variableDomains?.[variable] || 'nonnegative';
+      const op = domain === 'free'
+        ? '='
+        : primalSense === 'max'
+          ? domain === 'nonnegative' ? '>=' : '<='
+          : domain === 'nonnegative' ? '<=' : '>=';
+      return {
+        op,
+        rhs: primalObjective.coeffs[variable] || rational(0),
+        coeffs: Object.fromEntries(primalConstraints.map((constraint, index) => [
+          dualVariables[index], constraint.coeffs[variable] || rational(0)
+        ]))
+      };
+    });
+
+  return {
+    objective: dualObjective,
+    constraints,
+    variables: dualVariables,
+    primalVariables: variables,
+    primalSense,
+    matrix: primalConstraints.map(constraint => variables.map(variable =>
+      constraint.coeffs[variable] || rational(0))),
+    primalObjectiveCoefficients: variables.map(variable => primalObjective.coeffs[variable] || rational(0))
+  };
+}
+
+function dualLinearExpression(coefficients, variables){
+  return linearCombinationToLatex(variables.map(variable => ({
+    variable,
+    coefficient: coefficients[variable] || rational(0)
+  })));
+}
+
+function renderDualTransformationCard(dualModel){
+  const card = document.createElement('article');
+  card.className = 'step-card dual-transformation';
+  const primalObjectiveLabel = dualModel.primalSense === 'max' ? 'Maximizar' : 'Minimizar';
+  const dualObjectiveLabel = dualModel.objective.sense === 'max' ? 'Maximizar' : 'Minimizar';
+  const dualVariables = dualModel.variables;
+  const primalVariables = dualModel.primalVariables;
+  const dualObjectiveExpression = dualLinearExpression(dualModel.objective.coeffs, dualVariables);
+  const matrixHead = `<tr><th>Restricción primal</th>${primalVariables.map(variable => `<th>${simplexNameToLatex(variable)}</th>`).join('')}</tr>`;
+  const matrixRows = dualModel.matrix.map((row, index) =>
+    `<tr><th>\\(R_{${index + 1}}\\)</th>${row.map(value => `<td>\\(${formatNum(value)}\\)</td>`).join('')}</tr>`
+  ).join('');
+  const dualConstraints = dualModel.constraints.map((constraint, index) =>
+    `<li>\\(${dualLinearExpression(constraint.coeffs, dualVariables)} ${constraintOperatorLatex(constraint.op)} ${formatNum(constraint.rhs)}\\)</li>`
+  ).join('');
+  const dualDomains = dualVariables.map((variable, index) => {
+    const domain = dualModel.objective.variableDomains[variable];
+    const symbol = {nonnegative: '\\ge 0', nonpositive: '\\le 0', free: '\\in\\mathbb{R}'}[domain];
+    return `\\(${simplexNameToLatex(variable)} ${symbol}\\) según el sentido de \\(R_{${index + 1}}\\).`;
+  }).join(' ');
+
+  card.innerHTML = `<h3>Conversión paso a paso del primal al dual</h3>
+    <p><strong>1. Identificar el sentido:</strong> el primal es de ${primalObjectiveLabel.toLowerCase()}; por dualidad, el dual será de ${dualObjectiveLabel.toLowerCase()}.</p>
+    <p><strong>2. Transponer la matriz de coeficientes:</strong> cada restricción primal genera una variable dual y cada variable primal genera una restricción dual.</p>
+    <div class="dual-matrix-wrap"><table class="dual-matrix">${matrixHead}${matrixRows}</table></div>
+    <p><strong>3. Formar la función objetivo dual:</strong> se usan los lados derechos \\(b_i\\) del primal como coeficientes de \\(y_i\\).</p>
+    <p>\\(${dualObjectiveLabel} \\quad W = ${dualObjectiveExpression}\\)</p>
+    <p><strong>4. Determinar los signos de las variables duales:</strong> dependen del sentido de cada restricción primal.</p>
+    <p>${dualDomains}</p>
+    <p><strong>5. Formar las restricciones duales:</strong> cada columna de la matriz transpuesta se compara con el coeficiente correspondiente de la función objetivo primal; el signo de la variable primal determina el operador.</p>
+    <ul>${dualConstraints || '<li>El dual no tiene restricciones provenientes de variables del primal fijadas en cero.</li>'}</ul>
+    <p>Así, el valor óptimo primal \\(Z\\) y el valor óptimo dual \\(W\\) deben coincidir cuando ambos modelos tienen óptimos finitos.</p>`;
+  return card;
+}
+
+function prependDualTransformation(context, target){
+  target.prepend(renderDualTransformationCard(context.dual));
+  typesetMath([target]);
+}
+
+function solveModelSummary(objective, constraints){
+  const variables = collectVars(objective, constraints);
+  objective.vars = variables;
+  if(variables.length === 2){
+    const result = solveGraphicalModel(objective, constraints);
+    return {
+      objective,
+      constraints,
+      variables,
+      type: 'graphical',
+      result,
+      value: result.optimum?.objective || null,
+      unbounded: result.unbounded,
+      infeasible: result.feasibleVertices.length === 0
+    };
+  }
+
+  const method = isStandardSimplexModel(constraints) ? 'simplex' : 'big-m';
+  const steps = method === 'two-phase'
+    ? twoPhaseSteps(objective, constraints)
+    : simplexSteps(objective, constraints, method);
+  const finalStep = steps[steps.length - 1];
+  const unbounded = finalStep.type === 'unbounded';
+  const solution = unbounded ? null : computeSolutionFromTable(finalStep.after || finalStep.state);
+  return {
+    objective,
+    constraints,
+    variables,
+    type: 'simplex',
+    steps,
+    solution,
+    value: solution && !solution.infeasible ? solution.Z : null,
+    unbounded,
+    infeasible: Boolean(solution?.infeasible)
+  };
+}
+
+function dualResultSummary(modelResult){
+  if(modelResult.unbounded) return 'No tiene óptimo finito (objetivo no acotado).';
+  if(modelResult.infeasible) return 'No se encontró una solución factible.';
+  if(modelResult.value === null) return 'No se pudo determinar un valor óptimo.';
+  const symbol = modelResult.objective.objectiveName || 'Z';
+  const assignments = modelResult.type === 'graphical'
+    ? modelResult.variables.map(variable => {
+      const index = modelResult.variables.indexOf(variable);
+      const value = index === 0 ? modelResult.result.optimum.x : modelResult.result.optimum.y;
+      return `\\(${simplexNameToLatex(variable)}=${formatNum(value)}\\;(${formatDecimal(value)})\\)`;
+    })
+    : modelResult.solution.vars.map(item =>
+      `\\(${simplexNameToLatex(item.var)}=${formatNum(item.value)}\\;(${formatDecimal(item.value)})\\)`
+    );
+  return `${assignments.join(', ')}; \\(${symbol}=${formatNum(modelResult.value)}\\;(${formatDecimal(modelResult.value)})\\)`;
+}
+
+function completeDualWorkflow(context, focusedResult){
+  const isDualFocused = context.focus === 'dual';
+  const oppositeModel = isDualFocused ? context.primal : context.dual;
+  const oppositeResult = solveModelSummary(oppositeModel.objective, oppositeModel.constraints);
+  const primalResult = isDualFocused ? oppositeResult : focusedResult;
+  const dualResult = isDualFocused ? focusedResult : oppositeResult;
+  const panel = $id('dual-results');
+  panel.replaceChildren();
+
+  if(!isDualFocused) panel.appendChild(renderDualTransformationCard(context.dual));
+  const comparison = document.createElement('section');
+  comparison.className = 'dual-comparison';
+  comparison.innerHTML = `<h3>Resultados y comparación de dualidad</h3>
+    <p><strong>Primal:</strong> ${dualResultSummary(primalResult)}</p>
+    <p><strong>Dual:</strong> ${dualResultSummary(dualResult)}</p>`;
+  if(primalResult.value !== null && dualResult.value !== null){
+    const equal = rationalCompare(primalResult.value, dualResult.value) === 0;
+    comparison.insertAdjacentHTML('beforeend', `<p class="${equal ? 'verification-box ok' : 'verification-box warning'}"><strong>Comparación:</strong> \\(Z=${formatNum(primalResult.value)}\\), \\(W=${formatNum(dualResult.value)}\\). ${equal
+      ? 'Los valores coinciden; se verifica la dualidad fuerte.'
+      : 'Los valores no coinciden; revisa la factibilidad y el estado de optimalidad de ambos modelos.'}</p>`);
+  } else {
+    comparison.insertAdjacentHTML('beforeend', '<p class="verification-box warning">La igualdad \\(Z=W\\) solo puede comprobarse si ambos modelos tienen un óptimo finito.</p>');
+  }
+  panel.appendChild(comparison);
+
+  const graphControls = document.createElement('div');
+  graphControls.className = 'dual-graph-controls';
+  graphControls.innerHTML = '<strong>Mostrar gráfica:</strong> ';
+  const activeModel = isDualFocused ? context.dual : context.primal;
+  const models = [
+    {label: 'Primal', model: context.primal},
+    {label: 'Dual', model: context.dual}
+  ];
+  models.forEach(({label, model}) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = `Gráfica del ${label.toLowerCase()}`;
+    button.disabled = model.objective.vars.length !== 2;
+    button.title = button.disabled ? 'La gráfica requiere exactamente dos variables.' : '';
+    if(model === activeModel) button.classList.add('active');
+    button.addEventListener('click', () => {
+      if(button.disabled) return;
+      graphControls.querySelectorAll('button').forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+      const graphicalResult = solveGraphicalModel(model.objective, model.constraints);
+      plotGraphicalModel(model.objective, model.constraints, graphicalResult);
+    });
+    graphControls.appendChild(button);
+  });
+  panel.appendChild(graphControls);
+  typesetMath([panel]);
 }
 
 function graphicalPointKey(point){
@@ -492,6 +699,7 @@ function renderGraphicalResult(result, obj){
   const domainDescription = result.variables
     .map(variable => `\\(${variable} ${domainLabels[obj.variableDomains?.[variable] || 'nonnegative']}\\)`)
     .join(', ');
+  const objectiveName = obj.objectiveName || 'Z';
   const overview = document.createElement('article');
   overview.className = 'step-card graphical-method';
   overview.innerHTML = `<h3>Método gráfico: intersecciones y vértices</h3>
@@ -506,7 +714,7 @@ function renderGraphicalResult(result, obj){
   container.appendChild(renderGraphicalIntersectionProcedure(result));
 
   const note = document.createElement('p');
-  note.innerHTML = `<strong>Función objetivo:</strong> ${obj.sense === 'min' ? 'Minimizar' : 'Maximizar'} \\(Z\\). Se evaluó en los ${result.feasibleVertices.length} vértices factibles.`;
+  note.innerHTML = `<strong>Función objetivo:</strong> ${obj.sense === 'min' ? 'Minimizar' : 'Maximizar'} \\(${objectiveName}\\). Se evaluó en los ${result.feasibleVertices.length} vértices factibles.`;
   container.appendChild(note);
   if(result.unbounded){
     const warning = document.createElement('p');
@@ -521,7 +729,7 @@ function renderGraphicalResult(result, obj){
 
   const table = document.createElement('table');
   table.className = 'simplex-table graphical-vertices';
-  table.innerHTML = `<thead><tr><th>Intersección</th><th>${result.variables[0]}</th><th>${result.variables[1]}</th><th>Z</th><th>Estado</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>Intersección</th><th>\\(${simplexNameToLatex(result.variables[0])}\\)</th><th>\\(${simplexNameToLatex(result.variables[1])}\\)</th><th>${objectiveName}</th><th>Estado</th></tr></thead>`;
   const body = document.createElement('tbody');
   if(!result.intersections.length){
     body.innerHTML = '<tr><td colspan="5">No se generaron intersecciones.</td></tr>';
@@ -560,7 +768,7 @@ function renderGraphicalVerification(result, obj){
       return `\\(${variable} = ${formatNum(value)}\\;(${formatDecimal(value)}),\\quad ${domainSymbol}\\) — ${meetsDomain ? 'cumple' : 'no cumple'}`;
     }).join(', ');
     target.className = 'verification-box ok';
-    target.innerHTML = `<strong>Solución óptima por método gráfico.</strong><p>${variableValues}</p><p>\\(Z = ${formatNum(optimum.objective)}\\;(${formatDecimal(optimum.objective)})\\)</p>`;
+    target.innerHTML = `<strong>Solución óptima por método gráfico.</strong><p>${variableValues}</p><p>\\(${obj.objectiveName || 'Z'} = ${formatNum(optimum.objective)}\\;(${formatDecimal(optimum.objective)})\\)</p>`;
   }
   typesetMath([target]);
 }
@@ -624,7 +832,7 @@ function plotGraphicalModel(obj, constraints, result){
       color: '#dc2626',
       lineWidth: 3,
       showLabel: true,
-      label: 'Óptimo'
+      label: `Óptimo ${obj.objectiveName || 'Z'}`
     });
   }
   result.feasibleVertices.forEach((point, index) => {
@@ -700,7 +908,7 @@ function renderResultVerification(solution, obj, constraints){
     <ul>${variableChecks}</ul>
     <p><strong>Sustitución en restricciones:</strong></p>
     <ul>${checks.map(check => `<li>R${check.index + 1}: \\(${check.substitution || '0'} ${constraintOperatorLatex(constraints[check.index].op)} ${formatNum(constraints[check.index].rhs)} \\;\\Rightarrow\\; ${formatNum(check.lhs)} ${constraintOperatorLatex(constraints[check.index].op)} ${formatNum(constraints[check.index].rhs)}\\) — ${check.valid ? 'cumple' : 'no cumple'}.</li>`).join('')}</ul>
-    <p><strong>Objetivo:</strong> \\(Z = ${objectiveSubstitution || '0'} = ${formatNum(z)}\\).</p>`;
+    <p><strong>Objetivo:</strong> \\(${obj.objectiveName || 'Z'} = ${objectiveSubstitution || '0'} = ${formatNum(z)}\\).</p>`;
   typesetMath([target]);
 }
 
@@ -708,11 +916,11 @@ function constraintOperatorLatex(operator){
   return operator === '<=' ? '\\le' : operator === '>=' ? '\\ge' : '=';
 }
 
-function renderUnboundedVerification(){
+function renderUnboundedVerification(objectiveName = 'Z'){
   const target = $id('verification');
   if(!target) return;
   target.className = 'verification-box warning';
-  target.innerHTML = '<strong>No existe una solución óptima finita.</strong><br>La última variable entrante no tiene una fila saliente con coeficiente positivo; por ello Z puede crecer indefinidamente.';
+  target.innerHTML = `<strong>No existe una solución óptima finita.</strong><br>La última variable entrante no tiene una fila saliente con coeficiente positivo; por ello ${objectiveName} puede crecer indefinidamente.`;
 }
 
 function renderInfeasibleVerification(){
@@ -757,6 +965,8 @@ function bigMObjectiveFormula(state){
 }
 
 function simplexNameToLatex(name){
+  const indexedPrimalVariable = {x: 1, y: 2, z: 3}[name.toLowerCase()];
+  if(indexedPrimalVariable) return `x_{${indexedPrimalVariable}}`;
   const match = name.match(/^([A-Za-z]+)(\d+)([+-])?$/);
   if(!match) return name;
   return `${match[1]}_{${match[2]}}${match[3] ? `^{${match[3]}}` : ''}`;
@@ -813,12 +1023,13 @@ function renderFreeVariableTransformation(container, state, obj, constraints){
   ).join('');
   const card = document.createElement('article');
   card.className = 'step-card free-variable-step';
+  const objectiveName = state.objectiveName || 'Z';
   card.innerHTML = `<h3>Cambio de variables libres</h3>
     <p>Para aplicar el método símplex, cada variable libre se expresa como la diferencia de dos variables no negativas:</p>
     <div class="free-variable-equations">${substitutions.join('<br>')}</div>
     <h4>Modelo después de sustituir</h4>
     <div class="free-variable-model">
-      <p><strong>${objectiveSense}:</strong> \\(Z = ${objective}\\)</p>
+      <p><strong>${objectiveSense}:</strong> \\(${objectiveName} = ${objective}\\)</p>
       <ul>${transformedConstraints}</ul>
     </div>
     <p>Las variables transformadas quedan como columnas independientes no negativas; las columnas de holgura, exceso y artificial se agregan según cada restricción antes de iniciar las iteraciones.</p>`;
@@ -857,7 +1068,7 @@ function tableToLatexWithHighlight(state, highlight){
   const slackIndexes = orderedSlackIndexes(state);
   const phaseOne = state.method === 'two-phase' && state.phase === 1;
   const objectiveScale = phaseOne || state.objectiveSense === 'min' ? -1 : 1;
-  const objectiveName = phaseOne ? 'r' : 'Z';
+  const objectiveName = phaseOne ? 'r' : state.objectiveName || 'Z';
   const columns = 'c' + 'r'.repeat(state.vars.length + slackIndexes.length + 2);
   const headers = ['\\text{Variables básicas}', objectiveName, ...state.vars.map(simplexNameToLatex), ...slackIndexes.map(index => simplexNameToLatex(state.slackNames[index])), '\\text{Solución}'];
   let latex = `\\[\\begin{array}{${columns}} ${headers.join(' & ')} \\\\ \\hline `;
@@ -901,7 +1112,7 @@ function renderObjectivePreparation(container, preparation, state, heading = 'Pr
     section.appendChild(note);
   } else {
     const objectiveScale = state.method === 'two-phase' && state.phase === 1 || state.objectiveSense === 'min' ? -1 : 1;
-    const objectiveName = state.method === 'two-phase' && state.phase === 1 ? 'r' : 'Z';
+    const objectiveName = state.method === 'two-phase' && state.phase === 1 ? 'r' : state.objectiveName || 'Z';
     preparation.operations.forEach(operation => {
       const displayFactor = rationalMultiply(operation.factor, objectiveScale);
       const rowOperation = document.createElement('p');
@@ -928,7 +1139,7 @@ function renderStepsLatex(steps, obj, constraints){
   if(steps[0].preparation) renderObjectivePreparation(container, steps[0].preparation, initial);
   container.insertAdjacentHTML('beforeend', '<h3>Tabla inicial para las iteraciones</h3>');
   if(initial.method !== 'two-phase' && initial.slackNames.some(name => /^A\d+$/.test(name))){
-    container.insertAdjacentHTML('beforeend', `<p class="big-m-objective"><strong>Función penalizada:</strong> \\(Z = ${bigMObjectiveFormula(initial)}\\)</p>`);
+    container.insertAdjacentHTML('beforeend', `<p class="big-m-objective"><strong>Función penalizada:</strong> \\(${initial.objectiveName || 'Z'} = ${bigMObjectiveFormula(initial)}\\)</p>`);
   }
   if(initial.method === 'two-phase'){
     container.insertAdjacentHTML('beforeend', '<p class="phase-heading"><strong>Fase I:</strong> minimizar la suma de las variables artificiales.</p>');
@@ -956,7 +1167,8 @@ function renderStepsLatex(steps, obj, constraints){
       const enteringLatex = `\\(${simplexNameToLatex(entering)}\\)`;
       const warning = document.createElement('article');
       warning.className = 'step-card simplex-unbounded';
-      warning.innerHTML = `<h3>Comprobación de no acotación</h3><p>La columna de <strong>${enteringLatex}</strong> sigue mejorando Z, pero no contiene coeficientes positivos en las restricciones. No hay razón mínima ni fila saliente.</p><p>Por tanto, ${enteringLatex} puede aumentar y Z crece indefinidamente.</p>`;
+      const objectiveName = step.state.objectiveName || 'Z';
+      warning.innerHTML = `<h3>Comprobación de no acotación</h3><p>La columna de <strong>${enteringLatex}</strong> sigue mejorando ${objectiveName}, pero no contiene coeficientes positivos en las restricciones. No hay razón mínima ni fila saliente.</p><p>Por tanto, ${enteringLatex} puede aumentar y ${objectiveName} crece indefinidamente.</p>`;
       const table = document.createElement('div');
       table.className = 'simplex-table';
       table.innerHTML = tableToLatexWithHighlight(step.state);
@@ -974,8 +1186,9 @@ function renderStepsLatex(steps, obj, constraints){
     const phaseLabel = step.phase
       ? `Fase ${step.phase}`
       : before.method === 'simplex' ? 'Símplex' : 'Gran M';
+    const objectiveName = before.objectiveName || 'Z';
     card.innerHTML = `<h3>${phaseLabel}: Iteración ${index + 1}</h3>
-      <p>Entra <strong>${enteringLatex}</strong> (coeficiente negativo en Z) y sale <strong>${leavingLatex}</strong> (menor razón positiva).</p>
+      <p>Entra <strong>${enteringLatex}</strong> (coeficiente negativo en ${objectiveName}) y sale <strong>${leavingLatex}</strong> (menor razón positiva).</p>
       <p><strong>Pivote:</strong> fila ${operation.leavingRowIdx + 1}, columna ${entering}, valor ${formatNum(operation.pivot)}.</p>`;
     const highlighted = document.createElement('div');
     highlighted.className = 'simplex-table';
@@ -986,7 +1199,7 @@ function renderStepsLatex(steps, obj, constraints){
     operation.factors.forEach((factor, rowIndex) => {
       if(!rationalIsZero(factor || 0)) operations += `<br>\\(R_{${rowIndex + 1}} \\leftarrow R_{${rowIndex + 1}} - (${formatNum(factor)})R_{${operation.leavingRowIdx + 1}}\\)`;
     });
-    if(!rationalIsZero(operation.objectiveFactor || 0)) operations += `<br>\\(Z \\leftarrow Z - (${formatNum(operation.objectiveFactor)})R_{${operation.leavingRowIdx + 1}}\\)`;
+    if(!rationalIsZero(operation.objectiveFactor || 0)) operations += `<br>\\(${objectiveName} \\leftarrow ${objectiveName} - (${formatNum(operation.objectiveFactor)})R_{${operation.leavingRowIdx + 1}}\\)`;
     const operationsEl = document.createElement('p');
     operationsEl.className = 'row-operations';
     operationsEl.innerHTML = `<strong>Operaciones para hacer cero la columna ${enteringLatex}:</strong><br>${operations}`;
@@ -1008,7 +1221,7 @@ function renderStepsLatex(steps, obj, constraints){
   solutionEl.className = solution.infeasible ? 'simplex-solution simplex-unbounded' : 'simplex-solution';
   solutionEl.innerHTML = solution.infeasible
     ? '<h3>Modelo infactible</h3><p>La Fase I/penalización conserva una variable artificial positiva. No se puede aceptar esta tabla como solución del problema original.</p>'
-    : `<h3>Solución óptima</h3><p><strong>Fracción (decimal):</strong> ${solution.vars.map(item => `\\(${item.var} = ${formatNum(item.value)}\\;(${formatDecimal(item.value)})\\)`).join(', ')}<br>\\(Z = ${formatNum(solution.Z)}\\;(${formatDecimal(solution.Z)})\\)</p>`;
+    : `<h3>Solución óptima</h3><p><strong>Fracción (decimal):</strong> ${solution.vars.map(item => `\\(${simplexNameToLatex(item.var)} = ${formatNum(item.value)}\\;(${formatDecimal(item.value)})\\)`).join(', ')}<br>\\(${initial.objectiveName || 'Z'} = ${formatNum(solution.Z)}\\;(${formatDecimal(solution.Z)})\\)</p>`;
   container.appendChild(solutionEl);
   typesetMath([container]);
 }
@@ -1078,7 +1291,7 @@ function plot2vars(obj, constraints){
   const b = obj.coeffs[y] || 0;
   if(Math.abs(a) > 1e-12 || Math.abs(b) > 1e-12){
     const lhs = [desmosTerm(a, x), desmosTerm(b, y)].filter(Boolean).join('+').replace(/\+\-/g, '-');
-    graph.setExpression({ id: 'objective', latex: `${lhs}=0`, color: '#dc2626', lineWidth: 3, showLabel: true, label: 'Z = 0' });
+    graph.setExpression({ id: 'objective', latex: `${lhs}=0`, color: '#dc2626', lineWidth: 3, showLabel: true, label: `${obj.objectiveName || 'Z'} = 0` });
   }
 }
 
