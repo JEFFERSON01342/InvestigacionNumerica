@@ -7,14 +7,14 @@
     <link rel="stylesheet" href="assets/css/global.css">
     <script>
         try {
-            if (localStorage.getItem('geomath-theme') === 'dark') {
-                document.documentElement.dataset.theme = 'dark';
-            }
+            const savedTheme = localStorage.getItem('geomath-theme');
+            const supportedThemes = ['rose', 'dark', 'ocean', 'forest', 'violet'];
+            document.documentElement.dataset.theme = supportedThemes.includes(savedTheme) ? savedTheme : 'rose';
         } catch (error) {
             console.warn('No se pudo recuperar la preferencia de tema:', error);
         }
     </script>
-    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-2">
+    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-3">
     <link rel="icon" type="image/png" href="assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -93,14 +93,24 @@
 </dialog>
 <header class="header-pro">
     <div class="navbar">
-        <div class="logo-area"><h1>GeoMath</h1></div>
+        <div class="logo-area">
+            <span class="brand-mark" aria-hidden="true">G</span>
+            <h1>GeoMath</h1>
+        </div>
         <div class="header-actions">
             <button id="onboarding-open" class="guide-toggle" type="button" aria-haspopup="dialog" aria-controls="onboarding-dialog">
                 Ver guía
             </button>
-        <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">
-            Activar modo oscuro
-        </button>
+            <label class="theme-picker" for="theme-select">
+                <span>Color de interfaz</span>
+                <select id="theme-select" aria-label="Color de interfaz">
+                    <option value="rose">Rosa</option>
+                    <option value="dark">Oscuro</option>
+                    <option value="ocean">Azul océano</option>
+                    <option value="forest">Verde bosque</option>
+                    <option value="violet">Violeta</option>
+                </select>
+            </label>
         </div>
     </div>
     <div class="hero-text">
@@ -112,14 +122,20 @@
 <main class="matrix-layout">
     <section class="main-content">
         <div class="container">
-            <div class="card">
-                <h2>Configuración</h2>
+            <div class="card config-card">
+                <div class="config-heading">
+                    <div>
+                        <h2>Configuración</h2>
+                        <p>Define cómo se interpretará y resolverá tu modelo.</p>
+                    </div>
+                    <span class="config-heading-mark" aria-hidden="true">01</span>
+                </div>
                 <div class="config-grid">
                     <div class="config-item">
-                        <label>Objetivo</label>
-                        <div>
-                            <label><input type="radio" name="sense-pl" value="max" checked> Maximizar</label>
-                            <label><input type="radio" name="sense-pl" value="min"> Minimizar</label>
+                        <label class="config-label">Objetivo</label>
+                        <div class="objective-options">
+                            <label class="objective-choice"><input type="radio" name="sense-pl" value="max" checked> Maximizar</label>
+                            <label class="objective-choice"><input type="radio" name="sense-pl" value="min"> Minimizar</label>
                         </div>
                     </div>
                     <div class="config-item">
@@ -219,8 +235,8 @@
 
 </main>
 
-<script src="assets/js/programacion-lineal/render.js?v=20261001-2"></script>
-<script src="assets/js/programacion-lineal/patch.js?v=20261001-2"></script>
+<script src="assets/js/programacion-lineal/render.js?v=20261001-3"></script>
+<script src="assets/js/programacion-lineal/patch.js?v=20261001-3"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -250,22 +266,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
         showOnboarding();
     }
 
-    const themeToggle = document.getElementById('theme-toggle');
-    function updateThemeToggle(){
-        const darkMode = document.documentElement.dataset.theme === 'dark';
-        themeToggle.setAttribute('aria-pressed', String(darkMode));
-        themeToggle.textContent = darkMode ? 'Activar modo claro' : 'Activar modo oscuro';
-    }
-    updateThemeToggle();
-    themeToggle.addEventListener('click', ()=>{
-        const darkMode = document.documentElement.dataset.theme !== 'dark';
-        document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+    const themeSelect = document.getElementById('theme-select');
+    themeSelect.value = document.documentElement.dataset.theme || 'rose';
+    themeSelect.addEventListener('change', ()=>{
+        const selectedTheme = themeSelect.value;
+        document.documentElement.dataset.theme = selectedTheme;
         try {
-            localStorage.setItem('geomath-theme', darkMode ? 'dark' : 'light');
+            localStorage.setItem('geomath-theme', selectedTheme);
         } catch (error) {
             console.warn('No se pudo guardar la preferencia de tema:', error);
         }
-        updateThemeToggle();
     });
 
     const objField = document.getElementById('objective-field');
