@@ -14,7 +14,7 @@
             console.warn('No se pudo recuperar la preferencia de tema:', error);
         }
     </script>
-    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-1">
+    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-2">
     <link rel="icon" type="image/png" href="assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -35,12 +35,73 @@
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body class="pl-page">
+<dialog id="onboarding-dialog" class="onboarding-dialog" aria-labelledby="onboarding-title" aria-describedby="onboarding-intro">
+    <div class="onboarding-content">
+        <div class="onboarding-mascot" aria-hidden="true">
+            <svg viewBox="0 0 180 170" role="presentation">
+                <ellipse class="mascot-shadow" cx="90" cy="153" rx="47" ry="9"/>
+                <path class="mascot-tail" d="M128 112c27 5 30 34 10 38-10 2-15-6-10-13 4-5 11-1 9 4"/>
+                <rect class="mascot-body" x="35" y="30" width="103" height="111" rx="39"/>
+                <path class="mascot-ear" d="M51 45 43 19c-2-7 6-11 12-6l23 20m43 12 8-26c2-7-6-11-12-6l-23 20"/>
+                <path class="mascot-belly" d="M56 104c0-18 14-31 31-31s31 13 31 31v9c0 13-12 22-31 22s-31-9-31-22z"/>
+                <ellipse class="mascot-eye" cx="69" cy="69" rx="5" ry="7"/>
+                <ellipse class="mascot-eye" cx="105" cy="69" rx="5" ry="7"/>
+                <path class="mascot-smile" d="M77 81c7 8 16 8 23 0"/>
+                <path class="mascot-cheek" d="M49 80c6-5 13-5 18 0m43 0c6-5 13-5 18 0"/>
+                <path class="mascot-arm" d="M39 91 20 104m114-13 18 13"/>
+                <path class="mascot-foot" d="M59 138v9m51-9v9"/>
+                <path class="mascot-star" d="m25 45 3 7 7 3-7 3-3 7-3-7-7-3 7-3zm122 2 2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
+            </svg>
+        </div>
+        <div class="onboarding-copy">
+            <p class="onboarding-eyebrow">Tu guía de Programación Lineal</p>
+            <h2 id="onboarding-title">¡Hola! Soy Geo, tu guía</h2>
+            <p id="onboarding-intro">Te acompaño a plantear el modelo y elegir cómo resolverlo. Sigue estos pasos para obtener una solución explicada.</p>
+        </div>
+        <ol class="onboarding-steps">
+            <li>
+                <span class="onboarding-step-number">1</span>
+                <div><strong>Escribe la función objetivo</strong><p>Ingresa solo los términos, por ejemplo <code>3x + 2y</code>. Elige si quieres maximizar o minimizar. Se aceptan fracciones como <code>1/2x + 3y</code>.</p></div>
+            </li>
+            <li>
+                <span class="onboarding-step-number">2</span>
+                <div><strong>Añade las restricciones</strong><p>Escribe una por una y pulsa <b>Añadir restricción</b>. Incluye el operador y el límite, por ejemplo <code>x + y &lt;= 4</code> o <code>2x + y &gt;= 6</code>.</p></div>
+            </li>
+            <li>
+                <span class="onboarding-step-number">3</span>
+                <div><strong>Configura variables y método</strong><p>Define el signo de cada variable. El método gráfico requiere exactamente dos variables; para los demás modelos puedes usar Símplex, Gran M o Dos Fases según las restricciones.</p></div>
+            </li>
+            <li>
+                <span class="onboarding-step-number">4</span>
+                <div><strong>Opcional: trabaja con el dual</strong><p>Activa <b>Trabajar el modelo dual</b> y elige si resolver el primal o el dual. Al final se muestran ambos resultados y se comparan los valores de <i>Z</i> y <i>W</i>.</p></div>
+            </li>
+            <li>
+                <span class="onboarding-step-number">5</span>
+                <div><strong>Resuelve y revisa</strong><p>Pulsa el botón de cálculo. Verás el procedimiento paso a paso, las tablas exactas en fracciones, la aproximación decimal y la gráfica cuando corresponda.</p></div>
+            </li>
+        </ol>
+        <div class="onboarding-example">
+            <strong>Ejemplo rápido</strong>
+            <span>Maximizar: <code>3x + 2y</code></span>
+            <span>Restricciones: <code>x + y &lt;= 4</code>, <code>x &lt;= 3</code>, <code>y &lt;= 2</code></span>
+        </div>
+        <div class="onboarding-actions">
+            <label class="onboarding-remember"><input id="onboarding-remember" type="checkbox"> No volver a mostrar al iniciar</label>
+            <button id="onboarding-start" type="button">¡Empezar!</button>
+        </div>
+    </div>
+</dialog>
 <header class="header-pro">
     <div class="navbar">
         <div class="logo-area"><h1>GeoMath</h1></div>
+        <div class="header-actions">
+            <button id="onboarding-open" class="guide-toggle" type="button" aria-haspopup="dialog" aria-controls="onboarding-dialog">
+                Ver guía
+            </button>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">
             Activar modo oscuro
         </button>
+        </div>
     </div>
     <div class="hero-text">
         <h2>Programación Lineal</h2>
@@ -158,11 +219,37 @@
 
 </main>
 
-<script src="assets/js/programacion-lineal/render.js?v=20261001-1"></script>
-<script src="assets/js/programacion-lineal/patch.js?v=20261001-1"></script>
+<script src="assets/js/programacion-lineal/render.js?v=20261001-2"></script>
+<script src="assets/js/programacion-lineal/patch.js?v=20261001-2"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{
+    const onboarding = document.getElementById('onboarding-dialog');
+    const onboardingStart = document.getElementById('onboarding-start');
+    const onboardingOpen = document.getElementById('onboarding-open');
+    const onboardingRemember = document.getElementById('onboarding-remember');
+    function showOnboarding(){
+        if(!onboarding.open) onboarding.showModal();
+    }
+    onboardingOpen.addEventListener('click', showOnboarding);
+    onboardingStart.addEventListener('click', ()=>{
+        if(onboardingRemember.checked){
+            try {
+                localStorage.setItem('geomath-onboarding-dismissed', 'true');
+            } catch (error) {
+                console.warn('No se pudo guardar la preferencia de guía:', error);
+            }
+        }
+        onboarding.close();
+        document.getElementById('objective-field').focus();
+    });
+    try {
+        if(localStorage.getItem('geomath-onboarding-dismissed') !== 'true') showOnboarding();
+    } catch (error) {
+        console.warn('No se pudo recuperar la preferencia de guía:', error);
+        showOnboarding();
+    }
+
     const themeToggle = document.getElementById('theme-toggle');
     function updateThemeToggle(){
         const darkMode = document.documentElement.dataset.theme === 'dark';

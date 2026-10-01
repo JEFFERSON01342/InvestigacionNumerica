@@ -106,6 +106,84 @@ math-field{ width:100%; min-height:44px; border-radius:10px; padding:6px 8px; bo
 .theme-toggle:hover{ background:rgba(255,255,255,.22); }
 .theme-toggle:focus-visible{ outline:3px solid #fff; outline-offset:3px; }
 
+.header-actions{ display:flex; align-items:center; justify-content:center; gap:10px; }
+.guide-toggle{
+  border:1px solid rgba(255,255,255,.7);
+  border-radius:10px;
+  padding:9px 14px;
+  background:transparent;
+  color:#fff;
+  font:inherit;
+  font-weight:600;
+  cursor:pointer;
+}
+.guide-toggle:hover{ background:rgba(255,255,255,.16); }
+.guide-toggle:focus-visible{ outline:3px solid #fff; outline-offset:3px; }
+
+.onboarding-dialog{
+  width:min(780px, calc(100% - 28px));
+  max-width:none;
+  max-height:min(92vh, 900px);
+  margin:auto;
+  padding:0;
+  overflow:auto;
+  color:#1f2937;
+  background:#fff;
+  border:1px solid #fecaca;
+  border-radius:24px;
+  box-shadow:0 24px 90px rgba(15,23,42,.3);
+}
+.onboarding-dialog[open]{ animation:onboarding-enter .35s ease-out both; }
+.onboarding-dialog::backdrop{ background:rgba(15,23,42,.68); backdrop-filter:blur(4px); }
+.onboarding-content{ padding:clamp(18px, 4vw, 34px); }
+.onboarding-mascot{ width:142px; height:136px; margin:0 auto 4px; }
+.onboarding-mascot svg{ width:100%; height:100%; overflow:visible; animation:mascot-float 3s ease-in-out infinite; }
+.mascot-body{ fill:#ef4444; stroke:#991b1b; stroke-width:3; }
+.mascot-ear{ fill:#fca5a5; stroke:#991b1b; stroke-width:3; stroke-linejoin:round; }
+.mascot-belly{ fill:#fff7ed; }
+.mascot-eye{ fill:#1f2937; transform-box:fill-box; transform-origin:center; animation:mascot-blink 4.8s ease-in-out infinite; }
+.mascot-eye:nth-of-type(7){ animation-delay:.08s; }
+.mascot-smile,.mascot-arm,.mascot-foot,.mascot-tail{ fill:none; stroke:#7f1d1d; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+.mascot-tail{ transform-box:fill-box; transform-origin:left center; animation:mascot-wave 1.5s ease-in-out infinite alternate; }
+.mascot-cheek{ fill:none; stroke:#fb7185; stroke-width:4; stroke-linecap:round; }
+.mascot-shadow{ fill:rgba(15,23,42,.13); animation:mascot-shadow 3s ease-in-out infinite; }
+.mascot-star{ fill:#fbbf24; animation:mascot-sparkle 2s ease-in-out infinite alternate; transform-origin:center; }
+.onboarding-copy{ text-align:center; max-width:600px; margin:0 auto 20px; }
+.onboarding-eyebrow{ color:#b91c1c; font-size:.78rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+.onboarding-copy h2{ color:#991b1b; font-size:clamp(1.6rem, 4vw, 2rem); margin:4px 0 8px; }
+.onboarding-copy > p:last-child{ color:#475569; line-height:1.6; }
+.onboarding-steps{ list-style:none; display:grid; gap:10px; padding:0; margin:0; }
+.onboarding-steps li{ display:grid; grid-template-columns:34px minmax(0, 1fr); gap:11px; align-items:start; padding:10px 12px; border:1px solid #e2e8f0; border-radius:13px; background:#f8fafc; }
+.onboarding-step-number{ display:grid; place-items:center; width:30px; height:30px; border-radius:50%; color:#fff; background:#b91c1c; font-weight:800; }
+.onboarding-steps strong{ color:#1f2937; }
+.onboarding-steps p{ margin:3px 0 0; color:#475569; font-size:.92rem; line-height:1.5; }
+.onboarding-dialog code{ padding:2px 5px; border-radius:5px; color:#7f1d1d; background:#fee2e2; font-family:Consolas, monospace; white-space:nowrap; }
+.onboarding-example{ display:grid; gap:5px; margin-top:13px; padding:12px 14px; border-left:4px solid #2563eb; border-radius:9px; background:#eff6ff; color:#334155; font-size:.92rem; }
+.onboarding-actions{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:18px; }
+.onboarding-remember{ display:flex; align-items:center; gap:8px; color:#475569; font-size:.9rem; }
+.onboarding-remember input{ accent-color:#b91c1c; }
+.onboarding-actions button{ border:0; border-radius:10px; padding:11px 22px; color:#fff; background:#b91c1c; font:inherit; font-weight:700; cursor:pointer; }
+.onboarding-actions button:hover{ background:#991b1b; }
+.onboarding-actions button:focus-visible{ outline:3px solid #2563eb; outline-offset:3px; }
+@keyframes onboarding-enter{ from{ opacity:0; transform:translateY(12px) scale(.98); } to{ opacity:1; transform:translateY(0) scale(1); } }
+@keyframes mascot-float{ 0%,100%{ transform:translateY(0) rotate(-1deg); } 50%{ transform:translateY(-7px) rotate(1deg); } }
+@keyframes mascot-wave{ from{ transform:rotate(-8deg); } to{ transform:rotate(9deg); } }
+@keyframes mascot-blink{ 0%,44%,48%,100%{ transform:scaleY(1); } 46%{ transform:scaleY(.12); } }
+@keyframes mascot-shadow{ 0%,100%{ transform:scaleX(1); opacity:.8; } 50%{ transform:scaleX(.8); opacity:.5; } }
+@keyframes mascot-sparkle{ from{ opacity:.55; transform:scale(.85) rotate(-8deg); } to{ opacity:1; transform:scale(1.12) rotate(8deg); } }
+@media(max-width:560px){
+  .onboarding-mascot{ width:112px; height:108px; }
+  .onboarding-content{ padding:17px; }
+  .onboarding-steps li{ padding:9px; }
+  .onboarding-actions{ align-items:stretch; flex-direction:column; }
+  .onboarding-actions button{ width:100%; }
+}
+@media(prefers-reduced-motion:reduce){
+  .onboarding-dialog[open], .onboarding-mascot svg, .mascot-eye, .mascot-tail, .mascot-shadow, .mascot-star{
+    animation:none;
+  }
+}
+
 /* Layout for the standalone linear programming page */
 .pl-page .matrix-layout{ display:block; padding:0 20px; }
 .pl-page .card{ width:100%; box-sizing:border-box; }
@@ -205,6 +283,20 @@ html[data-theme="dark"] .pl-page .dual-graph-controls button.active{
   color:#fca5a5;
   border-color:#f87171;
 }
+html[data-theme="dark"] .onboarding-dialog{
+  color:#e2e8f0;
+  background:#111827;
+  border-color:#7f1d1d;
+}
+html[data-theme="dark"] .onboarding-eyebrow,
+html[data-theme="dark"] .onboarding-copy h2{ color:#fca5a5; }
+html[data-theme="dark"] .onboarding-copy > p:last-child,
+html[data-theme="dark"] .onboarding-steps p,
+html[data-theme="dark"] .onboarding-remember{ color:#cbd5e1; }
+html[data-theme="dark"] .onboarding-steps li{ background:#172033; border-color:#334155; }
+html[data-theme="dark"] .onboarding-steps strong{ color:#f1f5f9; }
+html[data-theme="dark"] .onboarding-example{ color:#dbeafe; background:#172a40; border-color:#60a5fa; }
+html[data-theme="dark"] .onboarding-dialog code{ color:#fecaca; background:#3b1f2a; }
 html[data-theme="dark"] .pl-page .acciones-container button.secondary{
   color:#fca5a5;
   background:#1e293b;
