@@ -450,16 +450,29 @@ function updateVariableDomainControls(){
   if(!container) return;
   const objectiveField = $id('objective-field');
   const objective = { vars: [] };
+  let objectiveIsValid = false;
   if(objectiveField && objectiveField.value.trim()){
-    try { objective.vars = parseObjective(latexToAscii(objectiveField.value)).vars; }
+    try {
+      Object.assign(objective, parseObjective(latexToAscii(objectiveField.value)));
+      objectiveIsValid = true;
+    }
     catch(error){ console.debug('La función objetivo aún está incompleta:', error.message); }
   }
+  objective.sense = document.querySelector('input[name="sense-pl"]:checked')?.value || 'max';
+  objective.variableDomains = {...variableDomainsPL};
   const constraints = [];
+  let constraintsAreValid = constraintsLatex.length > 0;
   constraintsLatex.forEach(line => {
-    try { constraints.push(...parseConstraints(latexToAscii(line))); }
-    catch(error){ console.debug('La restricción aún está incompleta:', error.message); }
+    try {
+      const parsed = parseConstraints(latexToAscii(line));
+      if(!parsed.length) constraintsAreValid = false;
+      constraints.push(...parsed);
+    } catch(error){
+      constraintsAreValid = false;
+      console.debug('La restricción aún está incompleta:', error.message);
+    }
   });
-  updateSimplexMethodOptions(constraints);
+  updateSimplexMethodOptions(objective, constraints, objectiveIsValid && constraintsAreValid);
   const variables = collectVars(objective, constraints);
   container.replaceChildren();
   if(!variables.length){
@@ -492,6 +505,8 @@ function updateVariableDomainControls(){
     variableDomainsPL[variable] = select.value;
     select.addEventListener('change', () => {
       variableDomainsPL[variable] = select.value;
+      objective.variableDomains = {...variableDomainsPL};
+      updateSimplexMethodOptions(objective, constraints, objectiveIsValid && constraintsAreValid);
       if(typeof updatePlotFromInputs === 'function') updatePlotFromInputs();
     });
     row.append(label, select);
@@ -508,33 +523,103 @@ function isStandardSimplexModel(constraints){
   });
 }
 
-function updateSimplexMethodOptions(constraints){
+function describeMethodAvailability(method, supported, complete, standardModel, variableCount, dualAvailability){
+  if(!complete) return method === 'simplex'
+    ? 'Símplex estándar queda disponible al completar la función objetivo y al menos una restricción.'
+    : 'Completa la función objetivo y al menos una restricción para validar este método.';
+  if(method === 'simplex'){
+    return supported
+      ? 'Disponible: el modelo tiene restricciones compatibles con Símplex estándar y variables no negativas.'
+      : 'No disponible: Símplex estándar requiere restricciones ≤ (tras normalizar el lado derecho) y variables no negativas. Puedes resolver el dual si cumple esas condiciones.';
+  }
+  if(method === 'graphical'){
+    return supported
+      ? 'Disponible: el modelo tiene exactamente dos variables.'
+      : `No disponible: el método gráfico requiere exactamente dos variables; el modelo tiene ${variableCount}.`;
+  }
+  if(method === 'dual-simplex'){
+    return dualAvailability?.reason || 'El Símplex dual requiere restricciones y una base inicial dual-factible.';
+  }
+  if(method === 'revised') return 'Disponible: Símplex revisado admite restricciones ≤, ≥ e igualdad, con Fase I si se necesita una base inicial.';
+  if(method === 'big-m') return 'Disponible: Gran M admite restricciones ≤, ≥ e igualdad.';
+  return 'Disponible: Dos Fases admite restricciones ≤, ≥ e igualdad.';
+}
+
+function updateSimplexMethodOptions(objective, constraints, complete = true, isEffectiveModel = false){
   const select = $id('method-pl');
   if(!select) return;
-  const standardModel = isStandardSimplexModel(constraints);
-  const selected = select.value;
+  let model = {objective, constraints};
+  const dualMode = $id('dual-mode-pl')?.value || 'off';
+  const dualFocus = $id('dual-focus-pl')?.value || 'primal';
+  if(complete && !isEffectiveModel && dualMode === 'enabled' && dualFocus === 'dual'){
+    model = buildDualModel(objective, constraints);
+  }
+  const variables = complete ? collectVars(model.objective, model.constraints) : [];
+  const simplexConstraints = model.constraints.filter(constraint => {
+    if(typeof isImplicitNonNegativity !== 'function' || !isImplicitNonNegativity(constraint)) return true;
+    const variable = Object.keys(constraint.coeffs).find(name => !rationalIsZero(constraint.coeffs[name]));
+    return (model.objective.variableDomains?.[variable] || 'nonnegative') !== 'nonnegative';
+  });
+  const standardModel = complete && isStandardSimplexModel(simplexConstraints) &&
+    variables.every(variable => (model.objective.variableDomains?.[variable] || 'nonnegative') === 'nonnegative');
+  const dualAvailability = complete
+    ? dualSimplexAvailability(model.objective, model.constraints)
+    : {available: false, reason: 'Completa la función objetivo y las restricciones para comprobar si se cumplen los requisitos del Símplex dual.'};
+  const supported = {
+    simplex: !complete || standardModel,
+    revised: complete,
+    'big-m': complete,
+    'two-phase': complete,
+    graphical: complete && variables.length === 2,
+    'dual-simplex': complete && dualAvailability.available
+  };
   const options = Array.from(select.options);
   options.forEach(option => {
-    const available = standardModel
-      ? ['simplex', 'revised', 'big-m', 'two-phase', 'graphical'].includes(option.value)
-      : ['revised', 'big-m', 'two-phase', 'graphical'].includes(option.value);
-    option.disabled = !available;
-    option.hidden = !available;
+    option.hidden = option.value === 'dual-simplex' && !supported[option.value];
+    option.disabled = !supported[option.value];
+    option.textContent = ({
+      simplex: 'Símplex estándar',
+      'dual-simplex': 'Símplex dual',
+      revised: 'Símplex revisado',
+      'big-m': 'Gran M',
+      'two-phase': 'Dos Fases',
+      graphical: 'Método gráfico (2 variables)'
+    }[option.value] || option.textContent);
+    option.title = option.value === 'dual-simplex'
+      ? dualAvailability.reason
+      : describeMethodAvailability(option.value, supported[option.value], complete, standardModel, variables.length);
   });
-  const availableValues = standardModel
-    ? ['simplex', 'revised', 'big-m', 'two-phase', 'graphical']
-    : ['revised', 'big-m', 'two-phase', 'graphical'];
-  select.value = availableValues.includes(selected)
-    ? selected
-    : standardModel ? 'simplex' : 'big-m';
+  if(select.value === 'dual-simplex' && !supported['dual-simplex']){
+    select.value = 'revised';
+    updateMethodControls();
+  }
+  const activeMethod = select.value;
+  const methodHelp = $id('simplex-method-help');
+  if(methodHelp){
+    methodHelp.hidden = false;
+    methodHelp.textContent = activeMethod === 'dual-simplex'
+      ? dualAvailability.reason
+      : describeMethodAvailability(activeMethod, supported[activeMethod], complete, standardModel, variables.length, dualAvailability);
+  }
+  select.title = activeMethod === 'dual-simplex'
+    ? dualAvailability.reason
+    : describeMethodAvailability(activeMethod, supported[activeMethod], complete, standardModel, variables.length, dualAvailability);
 }
 
 function updateMethodControls(){
   const method = $id('method-pl')?.value;
   const calculateButton = $id('btn-calc-pl');
+  const methodSelect = $id('method-pl');
+  const methodHelp = $id('simplex-method-help');
+  if(methodSelect && methodHelp){
+    const explanation = methodSelect.selectedOptions[0]?.title || '';
+    methodSelect.title = explanation;
+    methodHelp.textContent = explanation;
+  }
   if(calculateButton){
     calculateButton.textContent = {
       simplex: 'Calcular Símplex',
+      'dual-simplex': 'Calcular Símplex dual',
       revised: 'Calcular Símplex revisado',
       'big-m': 'Calcular Gran M',
       'two-phase': 'Calcular Dos Fases',
@@ -556,6 +641,13 @@ const simplexExamples = [
     label: 'Símplex revisado — costos reducidos y pivotes',
     objective: '5x+4y',
     constraints: ['6x+4y<=24', 'x+2y<=6', 'x<=3']
+  },
+  {
+    method: 'dual-simplex',
+    label: 'Símplex dual — restricciones ≥ y minimización',
+    sense: 'min',
+    objective: '3x+2y',
+    constraints: ['3x+y>=3', '4x+3y>=6', 'x+y<=3']
   },
   {
     method: 'big-m',
@@ -582,9 +674,10 @@ function refreshExampleOptions(){
   const runButton = $id('run-example-pl');
   const method = $id('method-pl')?.value;
   if(!select || !runButton) return;
-  const examples = simplexExamples.filter(example => example.method === method);
+  const examples = simplexExamples.filter(example =>
+    example.method === method || example.method === 'dual-simplex');
   select.replaceChildren(new Option('Elige un ejemplo para el método seleccionado', ''));
-  examples.forEach((example, index) => select.add(new Option(example.label, String(index))));
+  examples.forEach(example => select.add(new Option(example.label, String(simplexExamples.indexOf(example)))));
   runButton.disabled = examples.length === 0 || !select.value;
 }
 
@@ -594,8 +687,7 @@ function runSelectedExample(){
     $id('status').textContent = 'Selecciona un ejemplo para el método actual.';
     return;
   }
-  const selectedIndex = Number(selectedValue);
-  const example = simplexExamples.filter(item => item.method === $id('method-pl')?.value)[selectedIndex];
+  const example = simplexExamples[Number(selectedValue)];
   if(!example){
     $id('status').textContent = 'Selecciona un ejemplo para el método actual.';
     return;
@@ -612,7 +704,7 @@ function runSelectedExample(){
     parseObjective(latexToAscii(example.objective)),
     parseConstraints(example.constraints.map(latexToAscii).join('\n'))
   ).forEach(variable => { variableDomainsPL[variable] = 'nonnegative'; });
-  document.querySelector('input[name="sense-pl"][value="max"]').checked = true;
+  document.querySelector(`input[name="sense-pl"][value="${example.sense || 'max'}"]`).checked = true;
   $id('dual-mode-pl').value = 'off';
   $id('dual-focus-item').hidden = true;
   $id('method-pl').value = example.method;
@@ -718,6 +810,17 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
 
   objField.addEventListener('input', updateVariableDomainControls);
   methodSelect.addEventListener('change', updateMethodControls);
+  document.querySelectorAll('input[name="sense-pl"]').forEach(input =>
+    input.addEventListener('change', updateVariableDomainControls)
+  );
+  $id('dual-mode-pl').addEventListener('change', () => {
+    updateVariableDomainControls();
+    updateMethodControls();
+  });
+  $id('dual-focus-pl').addEventListener('change', () => {
+    updateVariableDomainControls();
+    updateMethodControls();
+  });
   $id('example-pl').addEventListener('change', event=>{
     $id('run-example-pl').disabled = !event.currentTarget.value;
   });
@@ -762,22 +865,22 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
         if(dualFocus === 'dual'){
           obj = dualModel.objective;
           parsedConstraints = dualModel.constraints;
-          updateSimplexMethodOptions(parsedConstraints);
-          if($id('method-pl').value === 'graphical' && collectVars(obj, parsedConstraints).length !== 2){
-            $id('method-pl').value = isStandardSimplexModel(parsedConstraints) ? 'simplex' : 'big-m';
-            updateMethodControls();
-          }
+          updateSimplexMethodOptions(obj, parsedConstraints, true, true);
+          updateMethodControls();
         }
       } else {
         $id('dual-results-card').hidden = true;
         $id('dual-results').replaceChildren();
       }
       const method = $id('method-pl') ? $id('method-pl').value : 'big-m';
+      if($id('method-pl')?.selectedOptions[0]?.disabled){
+        throw new Error($id('method-pl').selectedOptions[0].title || 'El método seleccionado no es compatible con el modelo.');
+      }
       const workingSense = obj.sense || sense;
       if(method === 'graphical'){
         obj.vars = collectVars(obj, parsedConstraints);
         if(obj.vars.length !== 2) throw new Error('El método gráfico solo se puede aplicar a modelos con exactamente dos variables.');
-        if(dualFocus !== 'dual') obj.variableDomains = variableDomains;
+        if(dualFocus === 'primal') obj.variableDomains = variableDomains;
         const report = validateSimplexModel(obj, parsedConstraints, workingSense, method);
         renderPreflightReport(report);
         if(!report.ok) throw new Error('El modelo gráfico necesita al menos una restricción válida.');
@@ -786,7 +889,7 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
         renderGraphicalVerification(result, obj);
         plotGraphicalModel(obj, parsedConstraints, result);
         if(dualContext){
-          if(dualFocus === 'dual') prependDualTransformation(dualContext, $id('steps'));
+          if(dualFocus !== 'primal') prependDualTransformation(dualContext, $id('steps'));
           completeDualWorkflow(dualContext, {
             objective: obj,
             constraints: parsedConstraints,
@@ -816,17 +919,24 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       const preflight = validateSimplexModel(obj, cons, workingSense, method);
       if(implicitNonNegative.length) preflight.notes.push(`Se reconocieron ${implicitNonNegative.length} condición(es) de no negatividad implícita(s).`);
       renderPreflightReport(preflight);
-      if(!preflight.ok) throw new Error('El modelo no puede resolverse con el simplex estándar. Revisa la comprobación previa.');
+      if(!preflight.ok) throw new Error(method === 'dual-simplex'
+        ? 'El modelo no cumple los requisitos del Símplex dual. Revisa la comprobación previa.'
+        : 'El modelo no puede resolverse con el simplex estándar. Revisa la comprobación previa.');
       const steps = method === 'revised'
         ? revisedSimplexSteps(obj, cons)
-        : method === 'two-phase' ? twoPhaseSteps(obj, cons) : simplexSteps(obj, cons, method);
+        : method === 'two-phase' ? twoPhaseSteps(obj, cons)
+        : method === 'dual-simplex' ? dualSimplexSteps(obj, cons)
+        : simplexSteps(obj, cons, method);
       console.log('Simplex produced steps count:', steps.length);
       if(!steps || steps.length===0){ status.textContent='No se generaron pasos (revisar entrada).'; return; }
       if(method === 'revised') renderRevisedSteps(steps);
       else renderStepsLatex(steps, obj, cons);
       const lastState = steps[steps.length - 1].after || steps[steps.length - 1].state;
-      if(steps[steps.length - 1].type === 'unbounded') {
+      const finalStep = steps[steps.length - 1];
+      if(finalStep.type === 'unbounded') {
         renderUnboundedVerification(obj.objectiveName || 'Z');
+      } else if(finalStep.type === 'dual-infeasible') {
+        renderInfeasibleVerification(method);
       } else {
         const solution = computeSolutionFromTable({...lastState, variableDomains: obj.variableDomains});
         if(solution.infeasible) renderInfeasibleVerification();
@@ -836,8 +946,8 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
       obj.vars = built.originalVars || built.vars;
       plot2vars(obj, cons);
       if(dualContext){
-        if(dualFocus === 'dual') prependDualTransformation(dualContext, $id('steps'));
-        const solution = steps[steps.length - 1].type === 'unbounded'
+        if(dualFocus !== 'primal') prependDualTransformation(dualContext, $id('steps'));
+        const solution = finalStep.type === 'unbounded' || finalStep.type === 'dual-infeasible'
           ? null
           : computeSolutionFromTable({...lastState, variableDomains: obj.variableDomains});
         completeDualWorkflow(dualContext, {
@@ -847,11 +957,15 @@ function initPLUI(){ const objField = $id('objective-field'); const consField = 
           type: 'simplex',
           solution,
           value: solution && !solution.infeasible ? solution.Z : null,
-          unbounded: steps[steps.length - 1].type === 'unbounded',
-          infeasible: Boolean(solution?.infeasible)
+          unbounded: finalStep.type === 'unbounded',
+          infeasible: finalStep.type === 'dual-infeasible' || Boolean(solution?.infeasible)
         });
       }
-      status.textContent = steps[steps.length - 1].type === 'unbounded' ? 'Proceso terminado: el problema no está acotado.' : 'Proceso completado.';
+      status.textContent = finalStep.type === 'unbounded'
+        ? 'Proceso terminado: el problema no está acotado.'
+        : finalStep.type === 'dual-infeasible'
+          ? 'Proceso terminado: el modelo es infactible.'
+          : 'Proceso completado.';
     }catch(e){
       console.error('Error during simplex calculation:', e);
       if(e.message.includes('no acotado') && typeof renderPreflightReport === 'function'){

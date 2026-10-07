@@ -138,6 +138,156 @@ function simplexSteps(obj, constraints, method = 'big-m'){
   throw new Error('Se alcanzó el límite de 200 iteraciones.');
 }
 
+function dualSimplexPreparation(obj, constraints){
+  const rows = [];
+  for(const constraint of constraints){
+    if(typeof isImplicitNonNegativity === 'function' && isImplicitNonNegativity(constraint)){
+      const variable = Object.keys(constraint.coeffs).find(name => !rationalIsZero(constraint.coeffs[name]));
+      if((obj.variableDomains?.[variable] || 'nonnegative') === 'nonnegative') continue;
+    }
+    if(constraint.op === '<='){
+      rows.push({
+        source: constraint,
+        normalized: {...constraint, coeffs: {...constraint.coeffs}},
+        negated: false
+      });
+      continue;
+    }
+    if(constraint.op === '>='){
+      rows.push({
+        source: constraint,
+        normalized: {
+          op: '<=',
+          rhs: rationalNegate(constraint.rhs),
+          coeffs: Object.fromEntries(Object.entries(constraint.coeffs).map(([variable, coefficient]) =>
+            [variable, rationalNegate(coefficient)]))
+        },
+        negated: true
+      });
+      continue;
+    }
+    return null;
+  }
+  return rows;
+}
+
+function prepareDualSimplexConstraints(obj, constraints){
+  const preparation = dualSimplexPreparation(obj, constraints);
+  return preparation && preparation.map(row => row.normalized);
+}
+
+function dualSimplexAvailability(obj, constraints){
+  if(!obj || !constraints.length) return {available: false, reason: 'El Símplex dual requiere una función objetivo y restricciones completas.'};
+  if(!Object.keys(obj.coeffs || {}).length) return {available: false, reason: 'El Símplex dual requiere una función objetivo con variables.'};
+  const variables = collectVars(obj, constraints);
+  if(variables.some(variable => (obj.variableDomains?.[variable] || 'nonnegative') !== 'nonnegative')){
+    return {available: false, reason: 'El Símplex dual requiere que todas las variables sean no negativas.'};
+  }
+  const normalizedConstraints = prepareDualSimplexConstraints(obj, constraints);
+  if(!normalizedConstraints){
+    return {available: false, reason: 'El Símplex dual requiere restricciones ≤ o ≥ (estas últimas se multiplican por −1); no admite igualdades.'};
+  }
+  if(!normalizedConstraints.some(constraint => rationalCompare(constraint.rhs, 0) < 0)){
+    return {available: false, reason: 'El Símplex dual requiere al menos un lado derecho negativo para iniciar desde una base no factible.'};
+  }
+  const objectiveDirection = obj.sense === 'min' ? -1 : 1;
+  if(variables.some(variable =>
+    rationalCompare(rationalMultiply(objectiveDirection, obj.coeffs[variable] || rational(0)), 0) > 0)){
+    return {available: false, reason: 'El Símplex dual requiere costos reducidos iniciales no negativos; revisa los signos de la función objetivo.'};
+  }
+  return {available: true, reason: 'Disponible: restricciones ≤, variables no negativas, lado derecho negativo y fila objetivo inicialmente dual-factible.'};
+}
+
+function dualSimplexSteps(obj, constraints){
+  const normalizedConstraints = prepareDualSimplexConstraints(obj, constraints);
+  if(!normalizedConstraints) throw new Error('El Símplex dual solo admite restricciones ≤ o ≥; las restricciones ≥ se multiplican por −1.');
+  const variables = collectVars(obj, constraints);
+  const availability = dualSimplexAvailability(obj, constraints);
+  if(!availability.available) throw new Error(availability.reason);
+
+  const vars = variables.slice();
+  const slackNames = normalizedConstraints.map((_, index) => `S${index + 1}`);
+  const objectiveDirection = obj.sense === 'min' ? -1 : 1;
+  const tableau = normalizedConstraints.map((constraint, rowIndex) => ({
+    coeffs: vars.map(variable => constraint.coeffs[variable] || rational(0)),
+    slack: slackNames.map((_, columnIndex) => rational(columnIndex === rowIndex ? 1 : 0)),
+    rhs: constraint.rhs,
+    basic: slackNames[rowIndex]
+  }));
+  const objRow = {
+    coeffs: vars.map(variable => rationalNegate(rationalMultiply(objectiveDirection, obj.coeffs[variable] || rational(0)))),
+    slack: slackNames.map(() => rational(0)),
+    rhs: rational(0),
+    basic: 'Z'
+  };
+  const variableMap = Object.fromEntries(vars.map((variable, index) =>
+    [variable, {positive: index, negative: null}]));
+  const metadata = {
+    method: 'dual-simplex',
+    objectiveName: obj.objectiveName || 'Z',
+    objectiveDirection,
+    objectiveSense: obj.sense || 'max',
+    objectiveCoeffs: {...obj.coeffs},
+    originalVars: vars.slice(),
+    variableMap,
+    variableDomains: Object.fromEntries(vars.map(variable => [variable, 'nonnegative'])),
+    freeVariables: false
+  };
+  const state = {vars, slackNames, tableau, objRow};
+  const steps = [{
+    type: 'initial',
+    state: cloneTableauState(vars, slackNames, tableau, objRow, metadata),
+    preparation: dualSimplexPreparation(obj, constraints)
+  }];
+
+  for(let iteration = 0; iteration < 200; iteration++){
+    let leavingRowIdx = -1;
+    for(let rowIndex = 0; rowIndex < state.tableau.length; rowIndex++){
+      if(rationalCompare(state.tableau[rowIndex].rhs, 0) >= 0) continue;
+      if(leavingRowIdx === -1 ||
+        rationalCompare(state.tableau[rowIndex].rhs, state.tableau[leavingRowIdx].rhs) < 0){
+        leavingRowIdx = rowIndex;
+      }
+    }
+    if(leavingRowIdx === -1) return steps;
+
+    const leavingRow = state.tableau[leavingRowIdx];
+    let enteringIndex = -1;
+    let bestRatio = null;
+    const candidates = [];
+    for(let columnIndex = 0; columnIndex < vars.length + slackNames.length; columnIndex++){
+      const name = tableauColumnName(state, columnIndex);
+      if(state.tableau.some(row => row.basic === name)) continue;
+      const coefficient = tableauValue(leavingRow, columnIndex);
+      if(rationalCompare(coefficient, 0) >= 0){
+        candidates.push({columnIndex, name, coefficient, reducedCost: tableauValue(state.objRow, columnIndex), ratio: null, eligible: false});
+        continue;
+      }
+      const ratio = rationalDivide(tableauValue(state.objRow, columnIndex), rationalNegate(coefficient));
+      candidates.push({columnIndex, name, coefficient, reducedCost: tableauValue(state.objRow, columnIndex), ratio, eligible: true});
+      if(bestRatio === null || rationalCompare(ratio, bestRatio) < 0 ||
+        (rationalCompare(ratio, bestRatio) === 0 && columnIndex < enteringIndex)){
+        bestRatio = ratio;
+        enteringIndex = columnIndex;
+      }
+    }
+    if(enteringIndex === -1){
+      steps.push({
+        type: 'dual-infeasible',
+        state: cloneTableauState(vars, slackNames, tableau, objRow, metadata),
+        leavingRowIdx
+      });
+      return steps;
+    }
+
+    const before = cloneTableauState(vars, slackNames, tableau, objRow, metadata);
+    const operation = pivotOn(state, enteringIndex, leavingRowIdx);
+    const after = cloneTableauState(vars, slackNames, tableau, objRow, metadata);
+    steps.push({type: 'pivot', before, operation, after, method: 'dual-simplex', candidates});
+  }
+  throw new Error('Se alcanzó el límite de 200 iteraciones del Símplex dual.');
+}
+
 function setObjectiveRow(state, variableCoeffs, slackCoeffs, rhs){
   state.objRow = {
     coeffs: state.vars.map(variable => variableCoeffs[variable] || rational(0)),
@@ -473,6 +623,14 @@ function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
   });
   const variables = collectVars(obj, constraints);
   if(!variables.length) issues.push('La función objetivo no contiene variables.');
+  if(method === 'simplex' && (!isStandardSimplexModel(constraints) ||
+    variables.some(variable => (obj.variableDomains?.[variable] || 'nonnegative') !== 'nonnegative'))){
+    issues.push('El Símplex estándar requiere restricciones ≤ después de normalizar el lado derecho y variables no negativas. Prueba Símplex revisado, Gran M, Dos Fases o resuelve el dual si cumple esas condiciones.');
+  }
+  if(method === 'dual-simplex'){
+    const availability = dualSimplexAvailability(obj, constraints);
+    if(!availability.available) issues.push(availability.reason);
+  }
   if(method !== 'graphical'){
     const direction = sense === 'min' ? -1 : 1;
     variables.forEach(variable => {
@@ -488,6 +646,8 @@ function validateSimplexModel(obj, constraints, sense, method = 'big-m'){
       notes.push('Se aplicará Símplex revisado: se mostrarán A, B, A_j, B^{-1}, b y los costos reducidos en cada iteración; si hace falta, la Fase I construirá una base factible.');
     } else if(method === 'graphical'){
       notes.push(`Se aplicará el método gráfico: se consideran los signos seleccionados, se intersectan las fronteras y se evalúa ${obj.objectiveName || 'Z'} en cada vértice factible.`);
+    } else if(method === 'dual-simplex'){
+      notes.push('Se aplicará Símplex dual: sale la variable básica con el lado derecho más negativo y entra la variable que conserva la factibilidad dual con la razón mínima.');
     } else {
       notes.push(method === 'two-phase'
         ? 'Se aplicará Dos Fases: la Fase I encuentra una solución básica factible y la Fase II optimiza la función original.'
@@ -619,10 +779,10 @@ function solveModelSummary(objective, constraints){
     };
   }
 
-  const method = isStandardSimplexModel(constraints) ? 'simplex' : 'big-m';
-  const steps = method === 'two-phase'
+  const needsInitialPhase = !isStandardSimplexModel(constraints);
+  const steps = needsInitialPhase
     ? twoPhaseSteps(objective, constraints)
-    : simplexSteps(objective, constraints, method);
+    : simplexSteps(objective, constraints, 'simplex');
   const finalStep = steps[steps.length - 1];
   const unbounded = finalStep.type === 'unbounded';
   const solution = unbounded ? null : computeSolutionFromTable(finalStep.after || finalStep.state);
@@ -1167,11 +1327,13 @@ function renderUnboundedVerification(objectiveName = 'Z'){
   target.innerHTML = `<strong>No existe una solución óptima finita.</strong><br>La última variable entrante no tiene una fila saliente con coeficiente positivo; por ello ${objectiveName} puede crecer indefinidamente.`;
 }
 
-function renderInfeasibleVerification(){
+function renderInfeasibleVerification(method){
   const target = $id('verification');
   if(!target) return;
   target.className = 'verification-box error';
-  target.innerHTML = '<strong>El modelo no tiene solución factible.</strong><br>Al finalizar Gran M, una variable artificial conserva un valor positivo; por tanto, las restricciones no pueden cumplirse simultáneamente.';
+  target.innerHTML = method === 'dual-simplex'
+    ? '<strong>El modelo no tiene solución factible.</strong><br>La fila con lado derecho negativo no ofrece un pivote que conserve la factibilidad dual; por tanto, las restricciones no pueden cumplirse simultáneamente.'
+    : '<strong>El modelo no tiene solución factible.</strong><br>Al finalizar Gran M, una variable artificial conserva un valor positivo; por tanto, las restricciones no pueden cumplirse simultáneamente.';
 }
 
 function formatBigM(value, state){
@@ -1311,7 +1473,7 @@ function displayTableauColumnIndex(state, columnIndex, slackIndexes){
 function tableToLatexWithHighlight(state, highlight){
   const slackIndexes = orderedSlackIndexes(state);
   const phaseOne = state.method === 'two-phase' && state.phase === 1;
-  const objectiveScale = phaseOne || state.objectiveSense === 'min' ? -1 : 1;
+  const objectiveScale = phaseOne || (state.objectiveSense === 'min' && state.method !== 'dual-simplex') ? -1 : 1;
   const objectiveName = phaseOne ? 'r' : state.objectiveName || 'Z';
   const columns = 'c' + 'r'.repeat(state.vars.length + slackIndexes.length + 2);
   const headers = ['\\text{Variables básicas}', objectiveName, ...state.vars.map(simplexNameToLatex), ...slackIndexes.map(index => simplexNameToLatex(state.slackNames[index])), '\\text{Solución}'];
@@ -1373,6 +1535,68 @@ function renderObjectivePreparation(container, preparation, state, heading = 'Pr
   container.appendChild(section);
 }
 
+function dualConstraintToLatex(constraint){
+  const lhs = linearCombinationToLatex(Object.entries(constraint.coeffs).map(([variable, coefficient]) => ({
+    variable,
+    coefficient
+  })));
+  const operator = constraint.op === '<=' ? '\\le' : constraint.op === '>=' ? '\\ge' : '=';
+  return `${lhs} ${operator} ${formatNum(constraint.rhs)}`;
+}
+
+function renderDualSimplexPreparation(container, preparation, state){
+  const section = document.createElement('article');
+  section.className = 'step-card phase-card';
+  const originalObjective = Object.entries(state.objectiveCoeffs || {}).map(([variable, coefficient]) => ({
+    variable,
+    coefficient
+  }));
+  const workingObjective = state.objectiveSense === 'min'
+    ? originalObjective.map(term => ({...term, coefficient: rationalNegate(term.coefficient)}))
+    : originalObjective;
+  const workingObjectiveName = state.objectiveSense === 'min'
+    ? `\\max(-${state.objectiveName || 'Z'})`
+    : `\\max(${state.objectiveName || 'Z'})`;
+  const workingObjectiveLatex = linearCombinationToLatex(workingObjective);
+  const rows = (preparation || []).map((item, index) => {
+    const transformation = item.negated
+      ? `Multiplicar por \\(-1\\); al multiplicar una desigualdad por un número negativo, se invierte el signo: \\(-1\\cdot(${dualConstraintToLatex(item.source)})\\).`
+      : 'Se conserva; ya está en forma \\(\\le\\).';
+    return `<tr><td>R${index + 1}</td><td>\\(${dualConstraintToLatex(item.source)}\\)</td><td>${transformation}</td><td>\\(${dualConstraintToLatex(item.normalized)}\\)</td></tr>`;
+  }).join('');
+  const objectiveSense = state.objectiveSense === 'min' ? 'minimización' : 'maximización';
+  section.innerHTML = `<h3>Preparación del modelo para Símplex dual</h3>
+    <p>Partimos de una base de holguras. Las restricciones \\(\\ge\\) se multiplican por \\(-1\\) y cambian a \\(\\le\\); las que ya son \\(\\le\\) se dejan igual. Las condiciones de no negatividad de las variables se conservan. Así se obtiene una tabla inicial con lados derechos posiblemente negativos.</p>
+    <div class="simplex-table"><table class="dual-preparation-table">
+      <thead><tr><th>Fila</th><th>Restricción original</th><th>Transformación</th><th>Fila para la tabla</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <p>Se agrega una holgura \\(s_i\\ge0\\) por fila. Como aquí los lados derechos negativos hacen que la base inicial no sea factible, el método conserva la factibilidad dual: en la fila objetivo de trabajo los costos reducidos deben ser no negativos. Para este modelo, la función de trabajo es \\(${workingObjectiveName}=${workingObjectiveLatex}\\); si el problema original es de minimización, se maximiza su opuesto y al final se recupera el valor original.</p>
+    <p><strong>Regla de salida:</strong> elegir la fila \\(r\\) con el lado derecho \\(b_r\\) más negativo. <strong>Regla de entrada:</strong> solo son candidatas las columnas no básicas con \\(a_{rj}<0\\); para ellas calcular \\(\\theta_j=\\frac{\\bar c_j}{-a_{rj}}\\) y elegir la razón mínima no negativa. El pivote es \\(a_{rj}\\) en la intersección de esa fila y columna. Después se aplica Gauss–Jordan: \\(R_r\\leftarrow R_r/a_{rj}\\) y, para cada \\(i\\ne r\\), \\(R_i\\leftarrow R_i-a_{ij}R_r\\); así el pivote queda en 1 y los demás valores de su columna en 0. Se repite hasta que todos los lados derechos sean \\(\\ge0\\), o se declara infactibilidad si no hay columna elegible.</p>`;
+  container.appendChild(section);
+}
+
+function renderDualPivotSelection(card, step){
+  const row = step.before.tableau[step.operation.leavingRowIdx];
+  const leaving = simplexNameToLatex(row.basic);
+  const candidates = (step.candidates || []).map(candidate => {
+    const ratio = candidate.eligible
+      ? `\\(${formatNum(candidate.reducedCost)}/(${formatNum(rationalNegate(candidate.coefficient))})=${formatNum(candidate.ratio)}\\)`
+      : 'No elegible: \\(a_{rj}\\ge0\\)';
+    return `<tr><td>\\(${simplexNameToLatex(candidate.name)}\\)</td><td>\\(${formatNum(candidate.coefficient)}\\)</td><td>\\(${formatNum(candidate.reducedCost)}\\)</td><td>${ratio}</td><td>${candidate.columnIndex === step.operation.enteringIndex ? '<strong>Elegida: razón mínima</strong>' : candidate.eligible ? 'Elegible' : '—'}</td></tr>`;
+  }).join('');
+  const section = document.createElement('section');
+  section.className = 'revised-check';
+  section.innerHTML = `<h4>Elección del pivote</h4>
+    <p>La fila saliente es la de \\(${leaving}\\), con el lado derecho más negativo: \\(b_r=${formatNum(row.rhs)}\\). En esa fila, las candidatas deben tener \\(a_{rj}<0\\); así el pivote puede aumentar el lado derecho sin perder la factibilidad dual.</p>
+    <p>Para cada candidata se usa \\(\\theta_j=\\frac{\\bar c_j}{-a_{rj}}\\), donde \\(\\bar c_j\\) es el coeficiente de la variable en la fila objetivo. Se elige el menor \\(\\theta_j\\) no negativo; esa columna entra y su elemento \\(a_{rj}\\) es el pivote.</p>
+    <div class="simplex-table"><table class="dual-preparation-table">
+      <thead><tr><th>Columna</th><th>\\(a_{rj}\\)</th><th>\\(\\bar c_j\\)</th><th>Razón \\(\\theta_j\\)</th><th>Decisión</th></tr></thead>
+      <tbody>${candidates}</tbody>
+    </table></div>`;
+  card.appendChild(section);
+}
+
 function renderStepsLatex(steps, obj, constraints){
   const container = $id('steps');
   container.innerHTML = '';
@@ -1380,7 +1604,8 @@ function renderStepsLatex(steps, obj, constraints){
 
   const initial = steps[0].state;
   renderFreeVariableTransformation(container, initial, obj, constraints);
-  if(steps[0].preparation) renderObjectivePreparation(container, steps[0].preparation, initial);
+  if(initial.method === 'dual-simplex') renderDualSimplexPreparation(container, steps[0].preparation, initial);
+  if(steps[0].preparation && initial.method !== 'dual-simplex') renderObjectivePreparation(container, steps[0].preparation, initial);
   container.insertAdjacentHTML('beforeend', '<h3>Tabla inicial para las iteraciones</h3>');
   if(initial.method !== 'two-phase' && initial.slackNames.some(name => /^A\d+$/.test(name))){
     container.insertAdjacentHTML('beforeend', `<p class="big-m-objective"><strong>Función penalizada:</strong> \\(${initial.objectiveName || 'Z'} = ${bigMObjectiveFormula(initial)}\\)</p>`);
@@ -1420,6 +1645,17 @@ function renderStepsLatex(steps, obj, constraints){
       container.appendChild(warning);
       return;
     }
+    if(step.type === 'dual-infeasible'){
+      const warning = document.createElement('article');
+      warning.className = 'step-card simplex-unbounded';
+      warning.innerHTML = `<h3>Modelo infactible</h3><p>La fila de ${simplexNameToLatex(step.state.tableau[step.leavingRowIdx].basic)} tiene lado derecho negativo y no contiene coeficientes negativos que permitan un pivote dual. No existe una solución factible.</p>`;
+      const table = document.createElement('div');
+      table.className = 'simplex-table';
+      table.innerHTML = tableToLatexWithHighlight(step.state);
+      warning.appendChild(table);
+      container.appendChild(warning);
+      return;
+    }
     const { before, operation, after } = step;
     const entering = tableauColumnName(before, operation.enteringIndex);
     const leaving = before.tableau[operation.leavingRowIdx].basic;
@@ -1427,13 +1663,19 @@ function renderStepsLatex(steps, obj, constraints){
     const leavingLatex = `\\(${simplexNameToLatex(leaving)}\\)`;
     const card = document.createElement('article');
     card.className = 'step-card';
-    const phaseLabel = step.phase
+    const phaseLabel = before.method === 'dual-simplex'
+      ? 'Símplex dual'
+      : step.phase
       ? `Fase ${step.phase}`
       : before.method === 'simplex' ? 'Símplex' : 'Gran M';
     const objectiveName = before.objectiveName || 'Z';
+    const pivotExplanation = before.method === 'dual-simplex'
+      ? `Sale <strong>${leavingLatex}</strong>, que tiene el lado derecho más negativo. Entra <strong>${enteringLatex}</strong> porque su razón dual es la menor entre las columnas elegibles.`
+      : `Entra <strong>${enteringLatex}</strong> (coeficiente negativo en ${objectiveName}) y sale <strong>${leavingLatex}</strong> (menor razón positiva).`;
     card.innerHTML = `<h3>${phaseLabel}: Iteración ${index + 1}</h3>
-      <p>Entra <strong>${enteringLatex}</strong> (coeficiente negativo en ${objectiveName}) y sale <strong>${leavingLatex}</strong> (menor razón positiva).</p>
+      <p>${pivotExplanation}</p>
       <p><strong>Pivote:</strong> fila ${operation.leavingRowIdx + 1}, columna ${entering}, valor ${formatNum(operation.pivot)}.</p>`;
+    if(before.method === 'dual-simplex') renderDualPivotSelection(card, step);
     const highlighted = document.createElement('div');
     highlighted.className = 'simplex-table';
     highlighted.innerHTML = tableToLatexWithHighlight(before, operation);
@@ -1456,7 +1698,7 @@ function renderStepsLatex(steps, obj, constraints){
   });
 
   const finalStep = steps[steps.length - 1];
-  if(finalStep.type === 'unbounded'){
+  if(finalStep.type === 'unbounded' || finalStep.type === 'dual-infeasible'){
     typesetMath([container]);
     return;
   }

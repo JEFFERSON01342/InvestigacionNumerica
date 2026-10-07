@@ -14,7 +14,7 @@
             console.warn('No se pudo recuperar la preferencia de tema:', error);
         }
     </script>
-    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261001-7">
+    <link rel="stylesheet" href="assets/css/programacion-lineal.css?v=20261007-3">
     <link rel="icon" type="image/png" href="assets/img/logo.png">
 
     <script src="https://unpkg.com/mathlive@0.110.0"></script>
@@ -115,7 +115,7 @@
     </div>
     <div class="hero-text">
         <h2>Programación Lineal</h2>
-        <p>Métodos Símplex, Símplex revisado, Gran M, Dos Fases y método gráfico con entrada LaTeX.</p>
+        <p>Métodos Símplex, Símplex dual y revisado, Gran M, Dos Fases y método gráfico con entrada LaTeX.</p>
     </div>
 </header>
 
@@ -142,11 +142,13 @@
                         <label for="method-pl">Método</label>
                         <select id="method-pl">
                             <option value="simplex" selected>Símplex estándar</option>
+                            <option value="dual-simplex" hidden>Símplex dual</option>
                             <option value="revised">Símplex revisado</option>
                             <option value="big-m">Gran M</option>
                             <option value="two-phase">Dos Fases</option>
                             <option value="graphical">Método gráfico (2 variables)</option>
                         </select>
+                        <small id="simplex-method-help" class="method-help" role="status" aria-live="polite"></small>
                     </div>
                     <div class="config-item">
                         <label for="dual-mode-pl">Trabajar el modelo dual</label>
@@ -165,9 +167,9 @@
                     <div class="config-item examples-item">
                         <label for="example-pl">Ejemplo de demostración</label>
                         <select id="example-pl" aria-describedby="example-description">
-                            <option value="">Elige un ejemplo para el método seleccionado</option>
+                            <option value="">Elige un ejemplo para el método seleccionado o prueba Símplex dual</option>
                         </select>
-                        <p id="example-description">Carga un modelo de muestra y ejecútalo automáticamente para ver el procedimiento completo.</p>
+                        <p id="example-description">El ejemplo de Símplex dual también se puede cargar desde aquí; se seleccionará el método automáticamente.</p>
                         <button id="run-example-pl" type="button" disabled>Cargar y resolver ejemplo</button>
                     </div>
                     <div class="config-item variable-domains-item">
@@ -260,8 +262,8 @@
     </section>
 </div>
 
-<script src="assets/js/programacion-lineal/render.js?v=20261001-8"></script>
-<script src="assets/js/programacion-lineal/patch.js?v=20261001-7"></script>
+<script src="assets/js/programacion-lineal/render.js?v=20261007-3"></script>
+<script src="assets/js/programacion-lineal/patch.js?v=20261007-3"></script>
 <script>
 // Set up MathField options and preview wiring similar to Taylor
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -280,7 +282,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     let guidedTourIndex = 0;
     const guidedTourSteps = [
         {selector: '.config-card', title: 'Configuración del modelo', description: 'Aquí eliges si quieres maximizar o minimizar y defines cómo resolver el problema.'},
-        {selector: '#method-pl', title: 'Elige un método', description: 'Selecciona Símplex, Símplex revisado, Gran M, Dos Fases o el método gráfico. Los ejemplos disponibles cambian según el método.'},
+        {selector: '#method-pl', title: 'Elige un método', description: 'Selecciona Símplex, Símplex dual, Símplex revisado, Gran M, Dos Fases o el método gráfico. El Símplex dual aparece cuando el modelo tiene una base inicial dual-factible y al menos un lado derecho negativo. Los ejemplos disponibles cambian según el método.'},
         {selector: '#dual-mode-pl', title: 'Trabaja con el dual', description: 'Activa esta opción para generar el modelo dual y comparar ambos resultados al resolver.'},
         {selector: '#variable-domains-pl', title: 'Define los signos', description: 'Elige si cada variable es no negativa, no positiva, fija o libre. Los ejemplos usan variables no negativas.'},
         {selector: '#example-pl', title: 'Prueba un caso preestablecido', description: 'Elige un ejemplo del método actual y pulsa “Cargar y resolver ejemplo”. Se rellenan los campos y se ejecuta el procedimiento automáticamente.'},
@@ -422,6 +424,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
         field.smartMode = true;
         field.smartFence = true;
         field.virtualKeyboardMode = 'manual';
+        field.addEventListener('keydown', event=>{
+            if(event.key !== ' ' || event.ctrlKey || event.metaKey || event.altKey) return;
+            const expression = latexToAscii(field.value).trim();
+            const coefficient = expression.match(/([+\-−]?\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)?)$/);
+            if(!coefficient || /(?:<=|>=|=)\s*[+\-−]?\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)?$/.test(expression)) return;
+            const usedVariables = new Set(
+                (expression.slice(0, coefficient.index).match(/[a-z][a-z0-9]*/ig) || [])
+                    .map(variable=>variable.toLowerCase())
+            );
+            const variable = ['x', 'y', 'z', 'w', 'u', 'v'].find(name=>!usedVariables.has(name));
+            if(!variable) return;
+            event.preventDefault();
+            field.insert(variable);
+        });
     }
 
     configureMathField(objField);
